@@ -137,3 +137,101 @@ o mercado ali do lado vende peixe fresco?,fora_escopo
 o que significa a palavra saudade,fora_escopo
 como mudo a senha do wifi de casa,fora_escopo
 quem é o melhor tenista do mundo,fora_escopo
+"tenho alergia a molusco, a moqueca leva lula ou polvo?",cardapio_alergenicos
+quais pratos tem marisco? sou alérgica a moluscos,cardapio_alergenicos
+o berbigão é molusco? tenho alergia e não sei se posso comer,cardapio_alergenicos
+a paella de vcs leva mexilhão e lula?,cardapio_alergenicos
+o atum selado vem com crosta de gergelim?,cardapio_alergenicos
+vcs usam óleo de gergelim em algum molho,cardapio_alergenicos
+tem semente de gergelim no pão da casa?,cardapio_alergenicos
+o shoyu que acompanha o peixe tem soja né? sou alérgico,cardapio_alergenicos
+tem algum prato com tofu ou proteína de soja,cardapio_alergenicos
+alguma sobremesa leva lecitina de soja?,cardapio_alergenicos
+o pudim da casa é feito com ovo?,cardapio_alergenicos
+a maionese caseira leva ovo cru?,cardapio_alergenicos
+"tenho alergia a ovo, a lula à dorê é passada no ovo antes de empanar?",cardapio_alergenicos
+tem amendoim na farofa ou em alguma sobremesa?,cardapio_alergenicos
+"meu filho é alérgico a amendoim, a cocada leva amendoim?",cardapio_alergenicos
+vcs separam utensílios na cozinha pra quem tem alergia a amendoim,cardapio_alergenicos
+qual o preço do polvo grelhado,cardapio_alergenicos
+o camarão alho e óleo vem acompanhado de arroz?,cardapio_alergenicos
+tem prato sem ovo e sem leite?,cardapio_alergenicos
+o molho tarê do salmão leva soja ou gergelim?,cardapio_alergenicos
+quais sobremesas não têm amendoim nem castanha,cardapio_alergenicos
+quero cancelar a reserva que fiz pra sexta,reserva
+dá pra passar minha reserva de sábado pra domingo?,reserva
+"mudei de ideia, pode desmarcar a mesa das 19h",reserva
+preciso diminuir a reserva de 8 pra 5 pessoas,reserva
+troca minha reserva pro almoço em vez do jantar,reserva
+como cancelo uma reserva feita pelo chat?,reserva
+"vou atrasar uns 30 minutos, vocês mantêm minha mesa?",reserva
+a reserva no meu nome pode ser adiada pras 21h?,reserva
+quero antecipar a reserva das 20h pras 18h30,reserva
+tem multa se eu cancelar a reserva em cima da hora?,reserva
+"não vamos mais, cancela a mesa pra 6 de amanhã",reserva
+consigo alterar a data da reserva sem perder a mesa na varanda?,reserva
+queria incluir mais duas pessoas na reserva de hoje,reserva
+remarca minha mesa pra próxima quinta,reserva
+reservar mesa pra 4 no sábado às 13h,reserva
+tem mesa livre amanhã ao meio dia pra casal?,reserva
+"quero reservar pra confraternização da empresa, 10 pessoas",reserva
+dá pra reservar pra hoje daqui a 2 horas?,reserva
+desisti da reserva de domingo,reserva
+como sei se minha reserva foi confirmada?,reserva
+preciso mudar o número de pessoas e o horário da reserva,reserva
+o estacionamento é próprio ou tem que parar na rua?,horario_localizacao
+onde posso estacionar perto de vcs,horario_localizacao
+o estacionamento lota no fim de semana?,horario_localizacao
+tem vaga reservada pra pessoa com deficiência no estacionamento?,horario_localizacao
+dá pra parar o carro na frente do restaurante?,horario_localizacao
+tem bicicletário?,horario_localizacao
+como chego aí vindo do continente?,horario_localizacao
+"vou de uber, qual ponto de referência eu coloco?",horario_localizacao
+saindo de canasvieiras qual o caminho até vcs,horario_localizacao
+"vindo do norte da ilha, pego qual estrada pra chegar",horario_localizacao
+dá pra ir a pé do trapiche de santo antônio?,horario_localizacao
+tem algum ponto de referência perto do restaurante,horario_localizacao
+qual o cep de vcs,horario_localizacao
+manda o link do google maps,horario_localizacao
+fica longe da praça de santo antônio de lisboa?,horario_localizacao
+quanto tempo leva do centro até o restaurante,horario_localizacao
+abrem no almoço de sábado?,horario_localizacao
+que horas vcs fecham domingo,horario_localizacao
+funcionam no carnaval?,horario_localizacao
+o último pedido da cozinha é até que horas?,horario_localizacao
+vocês abrem na véspera de natal?,horario_localizacao
+o acesso de carro até aí é tranquilo?,horario_localizacao
+como reservar passagem aérea barata,fora_escopo
+quero fazer reserva de pousada em bombinhas,fora_escopo
+qual o horário de funcionamento do detran,fora_escopo
+como desativo a localização do meu celular,fora_escopo
+"meu cachorro tem alergia, que ração eu compro",fora_escopo
+qual remédio tomar pra alergia de pele,fora_escopo
+onde vejo o cardápio do bandejão da faculdade,fora_escopo
+quanto tá o quilo do camarão no mercado público,fora_escopo
+o que é uma mesa digitalizadora,fora_escopo
+qual mesa de som comprar pra iniciante,fora_escopo
+qual o horário de pico do trânsito na ponte,fora_escopo
+como funcionava o horário de verão,fora_escopo
+"minha conta de luz veio alta, o que eu faço",fora_escopo
+me explica o que é a sequência de fibonacci,fora_escopo
+como cuidar de um peixe beta no aquário,fora_escopo
+qual o endereço de ip do meu computador,fora_escopo
+como cancelar a assinatura da netflix,fora_escopo
+como mudo o horário do despertador no celular,fora_escopo
+quero reservar uma quadra de tênis pro fim de semana,fora_escopo
+qual o horário de visita do hospital,fora_escopo
+como chego no beto carrero saindo de floripa,fora_escopo
+"tenho alergia a pó, qual aspirador é melhor",fora_escopo
+a ostra gratinada leva queijo ou só manteiga?,cardapio_alergenicos
+tem opção sem frutos do mar pra quem é alérgico a tudo do mar?,cardapio_alergenicos
+o pastel de berbigão é frito no mesmo óleo do camarão?,cardapio_alergenicos
+"quero reservar pro dia dos namorados, mesa pra dois às 20h",reserva
+é possível transferir minha reserva pra outra pessoa?,reserva
+"reserva pra 9 pessoas no domingo meio dia, tem lugar?",reserva
+o restaurante fica de frente pro mar ou numa rua de trás?,horario_localizacao
+qual o horário de vocês no sábado à noite?,horario_localizacao
+a rua do restaurante tem acesso fácil pra quem vem de moto?,horario_localizacao
+quem escreveu dom casmurro,fora_escopo
+como faço pra reservar sala de reunião no outlook,fora_escopo
+qual o horário de atendimento do posto de saúde,fora_escopo
