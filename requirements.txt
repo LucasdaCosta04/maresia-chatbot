@@ -1,0 +1,23 @@
+# Dependências do projeto Maresia Chatbot
+# Instale com: pip install -r requirements.txt
+
+# Framework web que serve a interface e a API do chatbot
+flask>=3.0,<4
+
+# Aprendizado de máquina: vetorização de texto e classificação de intenções
+scikit-learn>=1.3,<2
+
+# Computação numérica (base do scikit-learn e do processamento dos dados)
+numpy>=1.24
+
+# Salvar e carregar os modelos treinados (arquivos .joblib em modelos/)
+joblib>=1.3
+
+# Geração de gráficos (ex.: métricas e avaliação do modelo)
+matplotlib>=3.7
+
+# Base de fusos horários para o zoneinfo (necessária no Windows)
+tzdata>=2023.3
+
+# Execução dos testes automatizados
+pytest>=7
