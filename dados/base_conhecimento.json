@@ -1,0 +1,560 @@
+{
+  "versao": "1.0",
+  "aviso_ficticio": "Restaurante, endereço, telefones, cardápio e preços são fictícios, criados para fins acadêmicos (A3 UNISUL).",
+  "restaurante": {
+    "nome": "Tempero Açoriano",
+    "descricao": "Restaurante de frutos do mar e culinária açoriana à beira da baía norte, em Santo Antônio de Lisboa, com ostras de cultivo local e receitas tradicionais da Ilha.",
+    "endereco": {
+      "logradouro": "Rua das Rendeiras Açorianas",
+      "numero": "120",
+      "bairro": "Santo Antônio de Lisboa",
+      "cidade": "Florianópolis",
+      "uf": "SC",
+      "cep": "88050-000"
+    },
+    "ponto_referencia": "A cerca de 200 m da Igreja Nossa Senhora das Necessidades, no caminho para o trapiche de Santo Antônio de Lisboa.",
+    "estacionamento": {
+      "tipo": "próprio e gratuito",
+      "vagas": 20,
+      "vagas_pcd": 2,
+      "vagas_idosos": 1,
+      "motos": "Há espaço demarcado para motos no próprio estacionamento.",
+      "bicicletario": "Bicicletário com 6 vagas na entrada.",
+      "manobrista": false,
+      "observacao": "No almoço de sábado e domingo o estacionamento costuma lotar. Nesses horários, há vagas na rua nas proximidades."
+    },
+    "como_chegar": {
+      "carro": "Pela SC-401, pegue a saída para Santo Antônio de Lisboa e siga pela Rodovia Gilson da Costa Xavier até o centrinho do bairro. Do centro de Florianópolis são cerca de 25 minutos e do aeroporto cerca de 40 minutos, dependendo do trânsito.",
+      "aplicativo": "Informe o endereço Rua das Rendeiras Açorianas, 120, ou use como ponto de referência a Igreja Nossa Senhora das Necessidades.",
+      "bicicleta": "O acesso pelo centrinho de Santo Antônio é plano. Deixe a bicicleta no nosso bicicletário, na entrada.",
+      "a_pe": "Do trapiche ou da praça de Santo Antônio de Lisboa são cerca de 5 minutos de caminhada pela orla."
+    },
+    "telefone": "(48) 0000-1234",
+    "whatsapp": "(48) 90000-1234",
+    "observacao_contato": "Números fictícios, apenas para o projeto acadêmico."
+  },
+  "funcionamento": {
+    "dias": {
+      "segunda": {
+        "aberto": false,
+        "almoco": null,
+        "jantar": null
+      },
+      "terca": {
+        "aberto": true,
+        "almoco": {"abre": "11:30", "fecha": "15:00"},
+        "jantar": {"abre": "18:30", "fecha": "22:30"}
+      },
+      "quarta": {
+        "aberto": true,
+        "almoco": {"abre": "11:30", "fecha": "15:00"},
+        "jantar": {"abre": "18:30", "fecha": "22:30"}
+      },
+      "quinta": {
+        "aberto": true,
+        "almoco": {"abre": "11:30", "fecha": "15:00"},
+        "jantar": {"abre": "18:30", "fecha": "22:30"}
+      },
+      "sexta": {
+        "aberto": true,
+        "almoco": {"abre": "11:30", "fecha": "15:30"},
+        "jantar": {"abre": "18:30", "fecha": "23:30"}
+      },
+      "sabado": {
+        "aberto": true,
+        "almoco": {"abre": "11:30", "fecha": "15:30"},
+        "jantar": {"abre": "18:30", "fecha": "23:30"}
+      },
+      "domingo": {
+        "aberto": true,
+        "almoco": {"abre": "11:30", "fecha": "16:00"},
+        "jantar": null
+      }
+    },
+    "ultimo_pedido_minutos_antes": 30,
+    "observacao_feriados": "Em feriados seguimos o horário do dia da semana. Datas especiais, como Natal, Ano-Novo e Carnaval, podem ter horário diferente: confirme com a equipe pelo telefone ou WhatsApp."
+  },
+  "reserva": {
+    "min_pessoas": 1,
+    "max_pessoas": 10,
+    "antecedencia_minima_horas": 1,
+    "antecedencia_maxima_dias": 30,
+    "intervalo_horarios_minutos": 30,
+    "janela": {
+      "regra": "Reservas só em dias abertos, do horário de abertura de cada turno até 1 hora antes do fechamento.",
+      "ultima_reserva_minutos_antes_fechar": 60
+    },
+    "tolerancia_atraso_minutos": 15,
+    "politica_atraso": "Seguramos a mesa por até 15 minutos após o horário reservado. Se for se atrasar mais, avise pelo chat ou pelo telefone que tentamos manter a mesa, conforme a disponibilidade.",
+    "politica_alteracao": "Data, horário e número de pessoas podem ser alterados pelo chat ou pelo telefone até 2 horas antes do horário reservado, conforme a disponibilidade.",
+    "politica_cancelamento": "O cancelamento pode ser feito pelo chat ou pelo telefone até 2 horas antes, sem custo. Depois disso, avise o quanto antes pelo telefone para liberarmos a mesa.",
+    "mensagem_acima_limite": "Para grupos com mais de 10 pessoas, a reserva é feita com a nossa equipe. Vou te passar para um atendente."
+  },
+  "cardapio": [
+    {
+      "id": "ostras_in_natura",
+      "nome": "Ostras in Natura (dúzia)",
+      "categoria": "entrada",
+      "descricao": "Doze ostras frescas de cultivo local, servidas no gelo com limão.",
+      "preco": 59.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["ostra in natura", "ostras naturais", "ostra crua", "ostras cruas", "ostra fresca", "duzia de ostras", "ostra"],
+      "alergenicos": ["moluscos"],
+      "pode_conter": [],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "ostras_gratinadas",
+      "nome": "Ostras Gratinadas (dúzia)",
+      "categoria": "entrada",
+      "descricao": "Doze ostras gratinadas com manteiga, queijo parmesão e farinha de rosca.",
+      "preco": 74.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["ostra gratinada", "ostras gratinada", "ostra ao forno", "ostra com queijo", "ostras gratinadas"],
+      "alergenicos": ["moluscos", "leite", "trigo_gluten"],
+      "pode_conter": [],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": false
+    },
+    {
+      "id": "bolinho_siri",
+      "nome": "Bolinho de Siri (12 unidades)",
+      "categoria": "entrada",
+      "descricao": "Bolinhos de carne de siri com massa de farinha de trigo, ovo e leite, empanados e fritos.",
+      "preco": 49.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["bolinho de siri", "bolinhos de siri", "bolinho siri", "siri"],
+      "alergenicos": ["crustaceos", "trigo_gluten", "ovos", "leite"],
+      "pode_conter": ["peixes", "moluscos"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": false
+    },
+    {
+      "id": "pastel_berbigao",
+      "nome": "Pastel de Berbigão (6 unidades)",
+      "categoria": "entrada",
+      "descricao": "Pastéis de massa de trigo com ovo, recheados com berbigão refogado e fritos.",
+      "preco": 42.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["pastel de berbigao", "pasteis de berbigao", "pastel berbigao", "berbigao", "berbigão"],
+      "alergenicos": ["moluscos", "trigo_gluten", "ovos"],
+      "pode_conter": ["crustaceos", "peixes", "leite"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": false
+    },
+    {
+      "id": "lula_a_dore",
+      "nome": "Lula à Dorê",
+      "categoria": "entrada",
+      "descricao": "Anéis de lula passados no ovo e na farinha de trigo e fritos, com molho tártaro à parte.",
+      "preco": 64.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["lula a dore", "lula dore", "lula frita", "lula empanada", "aneis de lula", "lula"],
+      "alergenicos": ["moluscos", "ovos", "trigo_gluten"],
+      "pode_conter": ["crustaceos", "peixes"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": true
+    },
+    {
+      "id": "caldo_peixe",
+      "nome": "Caldo de Peixe",
+      "categoria": "entrada",
+      "descricao": "Caldo de peixe engrossado com farinha de mandioca (sem trigo), com cheiro-verde.",
+      "preco": 24.9,
+      "serve_pessoas": 1,
+      "sinonimos": ["caldo de peixe", "caldinho de peixe", "caldo peixe", "caldinho", "sopa de peixe"],
+      "alergenicos": ["peixes"],
+      "pode_conter": ["crustaceos"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "sequencia_camarao_tradicional",
+      "nome": "Sequência de Camarão Tradicional",
+      "categoria": "prato_principal",
+      "descricao": "Camarão ao bafo, à milanesa e ao alho e óleo, com pirão de peixe, arroz e salada.",
+      "preco": 189.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["sequencia de camarao", "sequência de camarão", "sequencia", "seq de camarao", "sequencia tradicional", "seq tradicional", "sequencia simples"],
+      "alergenicos": ["crustaceos", "trigo_gluten", "ovos", "peixes"],
+      "pode_conter": ["moluscos"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": true
+    },
+    {
+      "id": "sequencia_camarao_completa",
+      "nome": "Sequência de Camarão Completa",
+      "categoria": "prato_principal",
+      "descricao": "Tudo da tradicional (camarão ao bafo, à milanesa e ao alho e óleo, pirão, arroz e salada) mais camarão ao molho de queijo e isca de peixe frita.",
+      "preco": 249.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["sequencia completa", "seq completa", "sequencia de camarao completa", "sequência completa", "sequencia grande"],
+      "alergenicos": ["crustaceos", "trigo_gluten", "ovos", "peixes", "leite"],
+      "pode_conter": ["moluscos"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": false
+    },
+    {
+      "id": "tainha_escalada",
+      "nome": "Tainha Escalada",
+      "categoria": "prato_principal",
+      "descricao": "Tainha aberta, temperada e grelhada na brasa, com pirão de peixe, arroz e salada.",
+      "preco": 119.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["tainha", "tainha escalada", "tainha na brasa", "tainha grelhada", "tainha assada"],
+      "alergenicos": ["peixes"],
+      "pode_conter": ["crustaceos"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "sirigado_grelhado",
+      "nome": "Sirigado Grelhado",
+      "categoria": "prato_principal",
+      "descricao": "Posta de sirigado grelhada na manteiga de ervas, com legumes salteados e arroz.",
+      "preco": 98.9,
+      "serve_pessoas": 1,
+      "sinonimos": ["sirigado", "sirigado grelhado", "peixe grelhado", "posta de sirigado", "siriguado"],
+      "alergenicos": ["peixes", "leite"],
+      "pode_conter": ["crustaceos"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": false
+    },
+    {
+      "id": "moqueca_peixe",
+      "nome": "Moqueca de Peixe",
+      "categoria": "prato_principal",
+      "descricao": "Peixe em molho de leite de coco (sem creme de leite), azeite de dendê, tomate e pimentões, com arroz e pirão.",
+      "preco": 159.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["moqueca", "moqueca de peixe", "moqueca peixe", "muqueca"],
+      "alergenicos": ["peixes"],
+      "pode_conter": ["crustaceos", "moluscos"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "caldeirada_acoriana",
+      "nome": "Caldeirada Açoriana",
+      "categoria": "prato_principal",
+      "descricao": "Peixe, camarão, lula, mexilhão e berbigão cozidos em molho de tomate com ervas, servidos com pirão.",
+      "preco": 179.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["caldeirada", "caldeirada acoriana", "caldeirada de frutos do mar", "caldeirada açoriana"],
+      "alergenicos": ["peixes", "crustaceos", "moluscos"],
+      "pode_conter": [],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "camarao_na_moranga",
+      "nome": "Camarão na Moranga",
+      "categoria": "prato_principal",
+      "descricao": "Camarão em creme de requeijão engrossado com farinha de trigo, servido dentro da moranga, com arroz.",
+      "preco": 169.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["camarao na moranga", "camarao moranga", "moranga", "moranga com camarao"],
+      "alergenicos": ["crustaceos", "leite", "trigo_gluten"],
+      "pode_conter": [],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": false
+    },
+    {
+      "id": "arroz_polvo",
+      "nome": "Arroz de Polvo",
+      "categoria": "prato_principal",
+      "descricao": "Arroz cremoso com polvo, azeite, pimentões e azeitonas.",
+      "preco": 139.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["arroz de polvo", "arroz polvo", "arroz com polvo"],
+      "alergenicos": ["moluscos"],
+      "pode_conter": ["crustaceos", "peixes"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "risoto_frutos_mar",
+      "nome": "Risoto de Frutos do Mar",
+      "categoria": "prato_principal",
+      "descricao": "Arroz arbóreo com camarão, lula e mexilhão, finalizado com manteiga e queijo parmesão.",
+      "preco": 129.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["risoto", "risoto de frutos do mar", "risotto", "risoto frutos do mar", "risoto de camarao"],
+      "alergenicos": ["crustaceos", "moluscos", "leite"],
+      "pode_conter": ["peixes"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": false
+    },
+    {
+      "id": "camarao_alho_oleo",
+      "nome": "Camarão ao Alho e Óleo",
+      "categoria": "prato_principal",
+      "descricao": "Camarão médio salteado no alho e azeite, com arroz e batata frita.",
+      "preco": 109.9,
+      "serve_pessoas": 1,
+      "sinonimos": ["camarao alho e oleo", "camarao ao alho e oleo", "camarao no alho", "camarao alho oleo", "alho e oleo"],
+      "alergenicos": ["crustaceos"],
+      "pode_conter": ["trigo_gluten", "ovos", "moluscos", "peixes"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": true
+    },
+    {
+      "id": "polvo_grelhado",
+      "nome": "Polvo Grelhado",
+      "categoria": "prato_principal",
+      "descricao": "Tentáculos de polvo grelhados no azeite, com batatas ao murro e alho assado.",
+      "preco": 149.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["polvo", "polvo grelhado", "polvo na brasa", "polvo com batatas"],
+      "alergenicos": ["moluscos"],
+      "pode_conter": ["crustaceos", "peixes"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "pirao_peixe",
+      "nome": "Pirão de Peixe (porção extra)",
+      "categoria": "acompanhamento",
+      "descricao": "Pirão feito com caldo de peixe e farinha de mandioca, sem trigo.",
+      "preco": 22.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["pirao", "pirão", "pirao de peixe", "porcao de pirao", "pirao extra"],
+      "alergenicos": ["peixes"],
+      "pode_conter": ["crustaceos"],
+      "vegetariano": false,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "moqueca_banana_palmito",
+      "nome": "Moqueca de Banana-da-Terra com Palmito",
+      "categoria": "prato_principal",
+      "descricao": "Opção vegana: banana-da-terra e palmito em leite de coco, dendê, tomate e pimentões, com arroz e farofa de mandioca. Preparada em panela exclusiva.",
+      "preco": 89.9,
+      "serve_pessoas": 2,
+      "sinonimos": ["moqueca vegana", "moqueca vegetariana", "moqueca de banana", "moqueca de palmito", "moqueca de banana da terra", "prato vegano", "opcao vegana"],
+      "alergenicos": [],
+      "pode_conter": [],
+      "vegetariano": true,
+      "vegano": true,
+      "sem_gluten": true,
+      "sem_lactose": true
+    },
+    {
+      "id": "salada_casa",
+      "nome": "Salada da Casa",
+      "categoria": "salada",
+      "descricao": "Folhas verdes, tomate, palmito, queijo minas e croutons, com molho de mostarda e mel.",
+      "preco": 39.9,
+      "serve_pessoas": 1,
+      "sinonimos": ["salada", "salada da casa", "salada verde", "salada com croutons", "opcao vegetariana"],
+      "alergenicos": ["leite", "trigo_gluten"],
+      "pode_conter": [],
+      "vegetariano": true,
+      "vegano": false,
+      "sem_gluten": false,
+      "sem_lactose": false
+    },
+    {
+      "id": "pudim_leite",
+      "nome": "Pudim de Leite",
+      "categoria": "sobremesa",
+      "descricao": "Pudim de leite condensado e ovos, com calda de caramelo.",
+      "preco": 18.9,
+      "serve_pessoas": 1,
+      "sinonimos": ["pudim", "pudim de leite", "pudim da casa", "pudim de leite condensado"],
+      "alergenicos": ["leite", "ovos"],
+      "pode_conter": [],
+      "vegetariano": true,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": false
+    },
+    {
+      "id": "cocada_forno",
+      "nome": "Cocada de Forno",
+      "categoria": "sobremesa",
+      "descricao": "Cocada cremosa assada com coco fresco, ovos e leite condensado. Não leva amendoim, mas é feita em cozinha que manipula amendoim e castanhas.",
+      "preco": 19.9,
+      "serve_pessoas": 1,
+      "sinonimos": ["cocada", "cocada de forno", "cocada assada", "cocada cremosa"],
+      "alergenicos": ["ovos", "leite"],
+      "pode_conter": ["amendoim", "castanhas"],
+      "vegetariano": true,
+      "vegano": false,
+      "sem_gluten": true,
+      "sem_lactose": false
+    },
+    {
+      "id": "manjar_coco",
+      "nome": "Manjar de Coco",
+      "categoria": "sobremesa",
+      "descricao": "Manjar de leite de coco e amido de milho, sem leite de vaca, com calda de ameixa.",
+      "preco": 17.9,
+      "serve_pessoas": 1,
+      "sinonimos": ["manjar", "manjar de coco", "manjar branco", "manjar com ameixa", "sobremesa vegana", "sobremesa sem lactose"],
+      "alergenicos": [],
+      "pode_conter": [],
+      "vegetariano": true,
+      "vegano": true,
+      "sem_gluten": true,
+      "sem_lactose": true
+    }
+  ],
+  "alergenicos": {
+    "aviso_padrao": "As informações sobre alergênicos são informativas e podem mudar conforme fornecedores e preparo. Em caso de alergia ou restrição alimentar, confirme sempre com a nossa equipe antes de pedir.",
+    "itens": {
+      "trigo_gluten": {
+        "id": "trigo_gluten",
+        "nome": "Trigo / glúten",
+        "sinonimos": ["trigo", "gluten", "glúten", "farinha de trigo", "farinha de rosca", "centeio", "cevada", "aveia", "malte", "celiaco", "celiaca", "celíaco", "celíaca", "doenca celiaca"]
+      },
+      "crustaceos": {
+        "id": "crustaceos",
+        "nome": "Crustáceos",
+        "sinonimos": ["crustaceo", "crustaceos", "crustáceo", "camarao", "camarão", "siri", "caranguejo", "lagosta", "lagostim"]
+      },
+      "ovos": {
+        "id": "ovos",
+        "nome": "Ovos",
+        "sinonimos": ["ovo", "ovos", "gema", "clara", "albumina", "maionese"]
+      },
+      "peixes": {
+        "id": "peixes",
+        "nome": "Peixes",
+        "sinonimos": ["peixe", "peixes", "pescado", "tainha", "sirigado", "anchova", "atum", "salmao", "salmão", "bacalhau"]
+      },
+      "amendoim": {
+        "id": "amendoim",
+        "nome": "Amendoim",
+        "sinonimos": ["amendoim", "pacoca", "paçoca", "pasta de amendoim", "oleo de amendoim", "óleo de amendoim"]
+      },
+      "soja": {
+        "id": "soja",
+        "nome": "Soja",
+        "sinonimos": ["soja", "shoyu", "molho de soja", "tofu", "lecitina de soja", "proteina de soja", "molho tare", "tarê"]
+      },
+      "leite": {
+        "id": "leite",
+        "nome": "Leite e derivados",
+        "sinonimos": ["leite", "lactose", "laticinio", "laticínio", "queijo", "manteiga", "creme de leite", "requeijao", "requeijão", "nata", "caseina", "caseína", "leite condensado", "soro de leite"],
+        "observacao": "Alergia à proteína do leite e intolerância à lactose são condições diferentes. Os pratos marcados como sem lactose não levam leite de vaca nem derivados."
+      },
+      "castanhas": {
+        "id": "castanhas",
+        "nome": "Castanhas e oleaginosas",
+        "sinonimos": ["castanha", "castanhas", "oleaginosas", "castanha do para", "castanha de caju", "nozes", "noz", "amendoa", "amêndoa", "avela", "avelã", "pistache", "macadamia", "noz peca"]
+      },
+      "latex_natural": {
+        "id": "latex_natural",
+        "nome": "Látex natural",
+        "sinonimos": ["latex", "látex", "latex natural", "borracha natural", "luva de latex"],
+        "observacao": "Nenhum prato leva látex. A cozinha usa luvas nitrílicas, sem látex."
+      },
+      "moluscos": {
+        "id": "moluscos",
+        "nome": "Moluscos",
+        "sinonimos": ["molusco", "moluscos", "ostra", "ostras", "mexilhao", "mexilhão", "marisco", "berbigao", "berbigão", "lula", "polvo", "vieira", "sururu"]
+      },
+      "gergelim": {
+        "id": "gergelim",
+        "nome": "Gergelim",
+        "sinonimos": ["gergelim", "sesamo", "sésamo", "tahine", "oleo de gergelim", "óleo de gergelim"]
+      }
+    },
+    "termos_ambiguos": [
+      {
+        "termo": "frutos do mar",
+        "variacoes": ["frutos do mar", "fruto do mar", "frutos-do-mar", "tudo do mar", "coisas do mar"],
+        "ids": ["crustaceos", "moluscos"],
+        "orientacao": "\"Frutos do mar\" pode se referir a crustáceos (camarão, siri), a moluscos (ostra, lula, polvo, mexilhão, berbigão) ou aos dois. Peixe normalmente não entra nesse termo. Pergunte ao cliente qual é a alergia exata antes de indicar pratos.",
+        "pergunta_esclarecimento": "Para eu te orientar com segurança: a alergia é a crustáceos (como camarão e siri), a moluscos (como ostra, lula e mexilhão), aos dois, ou também a peixe?"
+      }
+    ]
+  },
+  "intencoes": [
+    {
+      "intencao": "cardapio_alergenicos",
+      "frases": [],
+      "respostas_fixas": [
+        "Nosso cardápio tem ostras, sequência de camarão, tainha escalada, moquecas e sobremesas da casa. Quer saber o preço ou os alergênicos de algum prato? 🌊",
+        "Posso te contar sobre qualquer prato do Tempero Açoriano: ingredientes, preço, quantas pessoas serve e alergênicos. Qual prato te interessa?",
+        "Temos entradas, pratos principais com frutos do mar, opções vegetarianas e sobremesas. Me diz o prato ou a restrição alimentar que eu verifico pra você."
+      ]
+    },
+    {
+      "intencao": "reserva",
+      "frases": [],
+      "respostas_fixas": [
+        "Vamos reservar sua mesa! Me diz a data, o horário e quantas pessoas vão. 🌊",
+        "Claro! Para fazer a reserva preciso de três coisas: dia, horário e número de pessoas.",
+        "Faço a reserva pra você por aqui, para até 10 pessoas. Qual dia, horário e quantas pessoas?"
+      ]
+    },
+    {
+      "intencao": "horario_localizacao",
+      "frases": [],
+      "respostas_fixas": [
+        "Abrimos de terça a domingo, no almoço e no jantar (domingo só almoço). Segunda estamos fechados. 🌊",
+        "Ficamos na Rua das Rendeiras Açorianas, 120, em Santo Antônio de Lisboa, perto da Igreja Nossa Senhora das Necessidades. Temos estacionamento próprio.",
+        "Quer saber o horário de algum dia ou como chegar até a gente? É só perguntar."
+      ]
+    },
+    {
+      "intencao": "fora_escopo",
+      "frases": [],
+      "respostas_fixas": [
+        "Desculpe, só consigo ajudar com assuntos do Tempero Açoriano: cardápio e alergênicos, reservas, horário e localização.",
+        "Esse assunto foge do que eu sei responder. Posso te ajudar com o cardápio, uma reserva ou o nosso horário e endereço. 🌊"
+      ]
+    }
+  ],
+  "fallback": [
+    "Não entendi muito bem. Posso ajudar com cardápio e alergênicos, reservas, horário e localização. Pode reformular?",
+    "Hmm, não consegui entender. Tente perguntar de outro jeito, por exemplo: \"tem prato sem glúten?\" ou \"quero reservar para sábado\"."
+  ],
+  "esclarecimento": [
+    "Só pra eu entender direito: você quer saber sobre {opcao_1} ou sobre {opcao_2}?",
+    "Fiquei na dúvida. Sua pergunta é sobre {opcao_1} ou {opcao_2}?"
+  ],
+  "encaminhamento_humano": [
+    "Parece que não estou conseguindo te ajudar. Quer falar com alguém da nossa equipe? É só chamar no WhatsApp (48) 90000-1234 ou ligar para (48) 0000-1234.",
+    "Vou te passar para um atendente humano. Você pode falar com a nossa equipe pelo WhatsApp (48) 90000-1234 ou pelo telefone (48) 0000-1234."
+  ]
+}
