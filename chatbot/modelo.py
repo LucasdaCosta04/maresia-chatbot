@@ -5,6 +5,7 @@ carregar_modelo -> classificar (prever_probabilidades + decidir).
 """
 
 import csv
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from chatbot.config import (
     LIMIAR_CONFIANCA,
     MARGEM_MINIMA,
     MAX_ITER,
+    MIN_PALAVRAS_PEDIDO,
     MIN_SEGUNDA_ESCLARECIMENTO,
     NGRAM_CARACTERES,
     NGRAM_PALAVRAS,
@@ -188,3 +190,59 @@ def decidir(probabilidades: dict[str, float]) -> Decisao:
 def classificar(modelo: Pipeline, texto: str) -> Decisao:
     """Atalho: preve as probabilidades do texto e aplica decidir()."""
     return decidir(prever_probabilidades(modelo, texto))
+
+
+# --- Pedidos multiplos ----------------------------------------------------------
+# Separadores de pedidos, aplicados ao texto ORIGINAL (sem pre-processar):
+# - pontuacao ? ! ; e o ponto final ("." entre digitos, como em "2.5", nao divide);
+# - conjuncoes como palavras inteiras, sem diferenciar maiusculas e com ou sem
+#   acento. As compostas ("e tambem", "alem disso") vem antes de "e" na
+#   alternancia, para casarem inteiras.
+# Virgula e "ou" NAO dividem: "camarao, lula ou polvo" e um pedido so.
+_RE_SEPARADORES = re.compile(
+    r"[?!;]|(?<!\d)\.(?!\d)"
+    r"|\b(?:e\s+tamb[eé]m|al[eé]m\s+disso|e|mas)\b",
+    re.IGNORECASE,
+)
+_RE_PALAVRA = re.compile(r"\w+")
+
+
+def dividir_pedidos(texto: str) -> list[str]:
+    """Divide uma mensagem nos trechos que podem ser pedidos diferentes.
+
+    Ex.: "quero reservar e também ver o cardápio" ->
+    ["quero reservar", "ver o cardápio"]. Trechos com menos de
+    MIN_PALAVRAS_PEDIDO palavras sao descartados ("arroz e feijão" -> []).
+    """
+    trechos = (trecho.strip(" ,") for trecho in _RE_SEPARADORES.split(texto))
+    return [t for t in trechos if len(_RE_PALAVRA.findall(t)) >= MIN_PALAVRAS_PEDIDO]
+
+
+def detectar_pedidos_multiplos(modelo: Pipeline, texto: str) -> Decisao | None:
+    """Detecta uma mensagem com pedidos de assuntos diferentes.
+
+    Classifica cada trecho de dividir_pedidos() com a politica normal
+    (classificar). Se 2 ou mais intencoes de DOMINIO diferentes forem
+    aceitas (fora_escopo nao conta), devolve uma Decisao de esclarecimento
+    com essas intencoes como candidatas, na ordem em que aparecem no texto,
+    e as probabilidades do texto inteiro. Senao, devolve None.
+    """
+    trechos = dividir_pedidos(texto)
+    if len(trechos) < 2:
+        return None
+
+    aceitas = []
+    for trecho in trechos:
+        decisao = classificar(modelo, trecho)
+        if (
+            decisao.tipo == "aceita"
+            and decisao.intencao != INTENCAO_FORA_ESCOPO
+            and decisao.intencao not in aceitas
+        ):
+            aceitas.append(decisao.intencao)
+    if len(aceitas) < 2:
+        return None
+
+    probabilidades = prever_probabilidades(modelo, texto)
+    intencao, confianca = max(probabilidades.items(), key=lambda item: item[1])
+    return Decisao("esclarecimento", intencao, confianca, aceitas, probabilidades)

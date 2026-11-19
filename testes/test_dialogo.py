@@ -16,6 +16,7 @@ from chatbot.dialogo import (
     Resposta,
     carregar_base,
 )
+from chatbot.entidades import extrair_entidades
 from chatbot.modelo import Decisao, carregar_dataset, treinar_modelo
 
 BASE = carregar_base()
@@ -631,3 +632,172 @@ def test_reiniciar_limpa_a_memoria():
     estado = EstadoConversa(ultimo_prato="lula_a_dore", ultima_data="2026-11-21")
     estado.reiniciar()
     assert estado == EstadoConversa()
+
+
+# --- Pedidos multiplos ----------------------------------------------------------
+
+T14 = "quero reservar uma mesa para sábado e também saber se vocês têm prato sem glúten"
+
+
+def test_t14_pergunta_por_onde_comecar(reserva, estado):
+    r = reserva.responder(T14, estado)
+    assert r.tipo == "esclarecimento"
+    assert r.texto.endswith("Por qual começamos?")
+    assert "1) reservas" in r.texto
+    assert "2) cardápio e alergênicos" in r.texto
+    assert r.probabilidades
+    assert estado.esclarecimento == ["reserva", "cardapio_alergenicos"]
+    assert estado.etapa_reserva is None
+
+
+def test_t14_resolvido_com_a_reserva(reserva, estado):
+    reserva.responder(T14, estado)
+    r = reserva.responder("a reserva", estado)
+    assert r.tipo == "aceita"
+    assert r.intencao == "reserva"
+    assert estado.esclarecimento is None
+    assert estado.etapa_reserva == "coletando"
+    assert r.texto.endswith(MENSAGENS_RESERVA["pergunta_pessoas"])
+
+
+def test_t14_resolvido_com_o_cardapio(reserva, estado):
+    reserva.responder(T14, estado)
+    r = reserva.responder("sobre o cardápio", estado)
+    assert r.intencao == "cardapio_alergenicos"
+    assert estado.esclarecimento is None
+    assert estado.etapa_reserva is None
+
+
+def test_tres_pedidos_resolvidos_no_turno_seguinte(reserva, estado):
+    r = reserva.responder("que horas vocês abrem? tem prato vegano? quero reservar uma mesa", estado)
+    assert "3) reservas" in r.texto
+    assert estado.esclarecimento == ["horario_localizacao", "cardapio_alergenicos", "reserva"]
+    r = reserva.responder("que horas vocês abrem no sábado?", estado)
+    assert r.intencao == "horario_localizacao"
+    assert estado.esclarecimento is None
+
+
+def test_pedido_multiplo_nao_conta_como_falha(reserva, estado):
+    estado.falhas_seguidas = 1
+    reserva.responder(T14, estado)
+    assert estado.falhas_seguidas == 1
+    assert estado.encaminhado is False
+
+
+def test_no_meio_da_reserva_e_preenchimento_de_slots(reserva, estado):
+    reserva.responder("quero reservar uma mesa", estado)
+    r = reserva.responder("para 4 pessoas e no sábado", estado)
+    assert r.tipo == "reserva"
+    assert estado.slots == {"pessoas": 4, "data": "2026-11-21"}
+    assert estado.esclarecimento is None
+    assert r.texto.startswith("Qual horário")
+
+
+# --- Data solta -----------------------------------------------------------------
+# AGORA: quarta 18/11/2026 18:00. Amanha = quinta 19/11; sabado = 21/11;
+# segunda = 23/11.
+
+ESCLARECIMENTO_DATA = ["reserva", "horario_localizacao"]
+
+
+@pytest.mark.parametrize(
+    "mensagem",
+    ["Sábado", "amanhã à noite", "dia 25", "hoje", "25/12", "sábado que vem",
+     "depois de amanhã de manhã", "sexta-feira", "sábado às 20h", "no almoço de domingo"],
+)
+def test_so_data_verdadeiro(reserva, mensagem):
+    assert reserva._so_data(mensagem, extrair_entidades(mensagem, AGORA)) is True
+
+
+@pytest.mark.parametrize(
+    "mensagem",
+    ["sábado vocês abrem?", "quero reservar sábado", "tem moqueca no sábado?", "oi", "asdfgh", "dia"],
+)
+def test_so_data_falso(reserva, mensagem):
+    assert reserva._so_data(mensagem, extrair_entidades(mensagem, AGORA)) is False
+
+
+def test_sabado_solto_pergunta_reserva_ou_horario(reserva, estado):
+    r = reserva.responder("Sábado", estado)
+    assert r.tipo == "esclarecimento"
+    assert "reserva para sábado, 21 de novembro de 2026" in r.texto
+    assert "horário de funcionamento nesse dia" in r.texto
+    assert estado.esclarecimento == ESCLARECIMENTO_DATA
+    assert estado.ultima_data == "2026-11-21"
+    assert estado.etapa_reserva is None
+
+
+def test_data_solta_escolhendo_reserva_preenche_a_data(reserva, estado):
+    reserva.responder("Sábado", estado)
+    r = reserva.responder("reserva", estado)
+    assert r.intencao == "reserva"
+    assert estado.etapa_reserva == "coletando"
+    assert estado.slots == {"data": "2026-11-21"}
+    assert r.texto.endswith(MENSAGENS_RESERVA["pergunta_pessoas"])
+    assert estado.esclarecimento is None
+    assert estado.data_solta is None
+
+
+def test_data_solta_com_horario_preenche_os_dois_slots(reserva, estado):
+    r = reserva.responder("sábado às 20h", estado)
+    assert ", às 20:00, ou saber" in r.texto
+    reserva.responder("mesa", estado)
+    assert estado.slots == {"data": "2026-11-21", "horario": "20:00"}
+
+
+def test_amanha_a_noite_escolhendo_horario(reserva, estado):
+    r = reserva.responder("amanhã à noite", estado)
+    assert r.tipo == "esclarecimento"
+    assert "quinta-feira, 19 de novembro de 2026" in r.texto
+    r = reserva.responder("horário", estado)
+    assert r.intencao == "horario_localizacao"
+    assert r.texto.startswith("Na quinta-feira (19/11) abrimos")
+    assert estado.esclarecimento is None
+    assert estado.assunto_anterior == "horario_localizacao"
+
+
+def test_segunda_solta_escolhendo_horario_informa_fechado(reserva, estado):
+    r = reserva.responder("segunda", estado)
+    assert r.tipo == "esclarecimento"
+    r = reserva.responder("horário", estado)
+    assert r.texto == "Na segunda-feira (23/11) o restaurante fica fechado."
+
+
+def test_data_solta_resolvida_pelo_classificador(reserva, estado):
+    reserva.responder("Sábado", estado)
+    r = reserva.responder("que horas vocês abrem?", estado)
+    assert r.texto.startswith("No sábado (21/11) abrimos")
+
+
+@pytest.mark.parametrize("palavra, intencao", [("reservar", "reserva"), ("abre?", "horario_localizacao"),
+                                               ("funcionamento", "horario_localizacao")])
+def test_palavras_chave_resolvem_o_esclarecimento(reserva, estado, palavra, intencao):
+    reserva.responder("Sábado", estado)
+    assert reserva.responder(palavra, estado).intencao == intencao
+
+
+def test_heranca_continua_valendo_com_assunto_anterior(reserva, estado):
+    reserva.responder("que horas abrem sábado?", estado)
+    r = reserva.responder("e no domingo?", estado)
+    assert r.tipo == "aceita"
+    assert r.herdou_contexto is True
+    assert r.texto.startswith("No domingo (22/11)")
+    assert estado.esclarecimento is None
+
+
+def test_durante_reserva_data_preenche_o_slot(reserva, estado):
+    reserva.responder("quero reservar uma mesa", estado)
+    r = reserva.responder("sábado", estado)
+    assert r.tipo == "reserva"
+    assert estado.slots == {"data": "2026-11-21"}
+    assert estado.esclarecimento is None
+
+
+def test_fallback_descarta_a_data_solta(reserva, estado):
+    reserva.responder("Sábado", estado)
+    reserva.responder("asdfgh", estado)
+    assert estado.esclarecimento is None
+    assert estado.data_solta is None
+    # Sem o pendente, "reserva" e so uma reserva nova, sem data.
+    reserva.responder("quero reservar uma mesa", estado)
+    assert "data" not in estado.slots
