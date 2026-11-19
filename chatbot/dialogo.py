@@ -3,21 +3,33 @@
 Para cada mensagem, nesta ordem:
 1. regras prioritarias (atendente, cancelar, ajuda, saudacao/despedida),
    avaliadas sobre o texto pre-processado, antes do classificador;
-2. classificador de intencoes + politica de decisao (modelo.classificar);
-3. tratamento da decisao: aceita, esclarecimento, abstencao ou fallback,
+2. se ha uma reserva em andamento, a mensagem e lida como resposta ao passo
+   atual (slots via extrair_entidades, confirmacao sim/nao);
+3. classificador de intencoes + politica de decisao (modelo.classificar);
+4. tratamento da decisao: aceita, esclarecimento, abstencao ou fallback,
    com encaminhamento humano depois de MAX_FALHAS_SEGUIDAS falhas.
 
-Os textos de fallback, esclarecimento, encaminhamento humano e as respostas
-de cada intencao vem da base de conhecimento (CAMINHO_BASE). Os textos das
-regras prioritarias nao existem na base e ficam em MENSAGENS_REGRAS.
+Os textos de fallback, esclarecimento, encaminhamento humano, as respostas
+de cada intencao, o funcionamento e as regras de reserva vem da base de
+conhecimento (CAMINHO_BASE). Os textos que nao existem na base ficam em
+MENSAGENS_REGRAS e MENSAGENS_RESERVA.
 """
 
 import json
 import random
 import re
 from dataclasses import dataclass, field
+from datetime import date, datetime, timedelta
+from typing import Callable
+from zoneinfo import ZoneInfo
 
-from chatbot.config import CAMINHO_BASE, INTENCAO_FORA_ESCOPO, MAX_FALHAS_SEGUIDAS
+from chatbot.config import (
+    CAMINHO_BASE,
+    FUSO_HORARIO,
+    INTENCAO_FORA_ESCOPO,
+    MAX_FALHAS_SEGUIDAS,
+)
+from chatbot.entidades import extrair_entidades
 from chatbot.modelo import Decisao, classificar
 from chatbot.preprocessamento import preprocessar
 
@@ -45,11 +57,62 @@ MENSAGENS_REGRAS = {
     "despedida": "Eu que agradeço! Até mais e bom apetite. 🌊",
 }
 
+# Textos do fluxo de reserva (a base so tem as regras e as politicas).
+MENSAGENS_RESERVA = {
+    "inicio": "Vamos reservar sua mesa! 🌊",
+    "pergunta_pessoas": "Para quantas pessoas é a reserva?",
+    "pergunta_data": 'Para qual dia? Pode ser, por exemplo, "sábado" ou "25/11".',
+    "pergunta_horario": "Qual horário você prefere? {janelas}",
+    "pergunta_nome": "Em nome de quem fica a reserva?",
+    "resumo": (
+        "Confere os dados da reserva:\n"
+        "• Pessoas: {pessoas}\n"
+        "• Data: {data}\n"
+        "• Horário: {horario}\n"
+        "• Nome: {nome}\n"
+        "Posso confirmar? (sim/não)"
+    ),
+    "confirmar_de_novo": "Posso confirmar a reserva? Responda sim ou não.",
+    "registrada": (
+        "Prontinho, {nome}! Reserva registrada para {pessoas} em {data}, às {horario}. 🌊\n"
+        "{politica_atraso}\n"
+        "⚠️ Atenção: isto é uma SIMULAÇÃO do projeto acadêmico. "
+        "Nenhuma reserva foi gravada de verdade."
+    ),
+    "o_que_alterar": "Sem problemas! O que você quer alterar: pessoas, data, horário ou nome?",
+    "nao_entendi": "Não entendi.",
+    "nao_tenho_certeza": "Não tenho certeza do que você quis dizer.",
+    "lembrete": "Sobre a sua reserva: {pergunta}",
+    # Erros de validacao
+    "fechado": "{No_dia} o restaurante fica fechado.",
+    "passado": "Essa data já passou.",
+    "alem_janela": "Aceitamos reservas com até {dias} dias de antecedência, ou seja, até {limite}.",
+    "pessoas_minimo": "A reserva precisa ser para pelo menos {minimo}.",
+    "acima_limite": "{mensagem} Fale com a nossa equipe pelo WhatsApp {whatsapp} ou pelo telefone {telefone}.",
+    "horario_fora": "Esse horário está fora do nosso período de reservas. {janelas}",
+    "antecedencia": "A reserva precisa ser feita com pelo menos {horas} de antecedência.",
+}
+
 # Indices das mensagens de encaminhamento_humano na base: a 1a fala de
 # "nao estou conseguindo te ajudar" (falhas); a 2a, de "vou te passar para
 # um atendente" (pedido explicito).
 _ENCAMINHAR_POR_FALHAS = 0
 _ENCAMINHAR_POR_PEDIDO = 1
+
+# Ordem em que os slots da reserva sao pedidos.
+SLOTS_RESERVA = ("pessoas", "data", "horario", "nome")
+
+# Chaves de funcionamento.dias na base, na ordem de date.weekday().
+_CHAVES_DIAS = ("segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo")
+_NOMES_DIAS = (
+    "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira",
+    "sexta-feira", "sábado", "domingo",
+)
+_NOMES_MESES = (
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho",
+    "agosto", "setembro", "outubro", "novembro", "dezembro",
+)
+_TURNOS = ("almoco", "jantar")
 
 # --- Regras prioritarias ------------------------------------------------------
 # Todas rodam sobre o texto de preprocessar(): minusculas, sem acento, sem
@@ -74,6 +137,9 @@ _EXTRAS = r"(?:por favor|isso|tudo|entao|ai|ok|ah|pode|maresia|tudo bem|tudo bom
 _RE_CANCELAR = re.compile(
     rf"^(?:{_EXTRAS} )*(?:cancelar|cancela|deixa para la|esquece)(?: {_EXTRAS})*$"
 )
+# Durante uma reserva em andamento, a unica coisa a cancelar e ela mesma:
+# "quero cancelar a reserva" ou "desisti" tambem encerram o fluxo.
+_RE_CANCELAR_NO_FLUXO = re.compile(r"\b(?:cancelar|cancela|cancele|desisto|desisti)\b")
 _RE_AJUDA = re.compile(
     rf"^(?:{_EXTRAS} )*(?:ajuda|me ajuda|preciso de ajuda|o que voces? faz(?:em)?"
     rf"|como funciona|como voce funciona|menu)(?: {_EXTRAS})*$"
@@ -86,6 +152,39 @@ _DESPEDIDAS = r"(?:tchau|obrigad[oa]|muito obrigad[oa]|valeu|ate mais|ate logo)"
 _RE_SAUDACAO = re.compile(rf"^{_SAUDACOES}(?: (?:{_SAUDACOES}|{_EXTRAS}))*$")
 _RE_DESPEDIDA = re.compile(rf"^{_DESPEDIDAS}(?: (?:{_DESPEDIDAS}|{_EXTRAS}))*$")
 
+# --- Reserva ------------------------------------------------------------------
+
+# Confirmacao do resumo: a mensagem inteira e um "sim".
+_RE_SIM = re.compile(
+    r"^(?:sim|s|confirmo|confirma|confirmar|pode|pode sim|pode confirmar|isso|isso mesmo"
+    r"|ok|claro|certo|fechado|beleza|perfeito)(?: (?:sim|por favor|pode|confirmo|obrigado|obrigada))*$"
+)
+# Negacao: a mensagem comeca com "nao" (pode vir junto uma correcao).
+_RE_NAO = re.compile(r"^(?:nao|n)\b")
+# Qual slot o cliente quer alterar ("quero mudar o horario").
+_RE_SLOT_ALTERAR = {
+    "pessoas": re.compile(r"\b(?:pessoas?|quantidade|numero de pessoas)\b"),
+    "data": re.compile(r"\b(?:data|dia)\b"),
+    "horario": re.compile(r"\b(?:horario|hora)\b"),
+    "nome": re.compile(r"\bnome\b"),
+}
+_RE_VERBO_ALTERAR = re.compile(r"\b(?:alter\w*|mud\w*|troc\w*|corrig\w*|errad[oa])\b")
+# Resposta curta de uma palavra so ("4", "quatro", "20"): sem a palavra
+# "pessoas" ou "h", extrair_entidades nao sabe o que ela e. "num" e como o
+# preprocessar() deixa um numero em algarismos.
+_RE_SO_NUMERO = re.compile(r"^(?:num|[a-z]+)$")
+# Resposta que parece um nome proprio: 1 a 4 palavras so com letras.
+_RE_PARECE_NOME = re.compile(r"^[^\W\d_]+(?:[ '-][^\W\d_]+){0,3}$")
+# Pedidos sobre uma reserva ja existente: respondidos com a politica da base,
+# sem abrir o fluxo de uma reserva nova.
+_RE_POLITICAS = (
+    ("politica_cancelamento", re.compile(r"\b(?:cancel\w*|desmarc\w*|desist\w*)\b")),
+    ("politica_alteracao", re.compile(
+        r"\b(?:alter\w*|mudar|muda|remarc\w*|antecip\w*|adia\w*|troc\w*)\b"
+    )),
+    ("politica_atraso", re.compile(r"\b(?:atras\w*|toleranc\w*)\b")),
+)
+
 
 @dataclass
 class EstadoConversa:
@@ -94,8 +193,9 @@ class EstadoConversa:
     falhas_seguidas: mensagens seguidas sem entender (fallback).
     assunto_anterior: intencao da ultima resposta aceita.
     esclarecimento: intencoes candidatas aguardando o cliente escolher.
-    slots: dados da reserva em andamento (preenchidos em etapas futuras).
+    slots: dados da reserva em andamento (pessoas, data, horario, nome).
     encaminhado: se a conversa ja foi encaminhada para um atendente.
+    etapa_reserva: None (sem reserva), "coletando" ou "confirmando".
     """
 
     falhas_seguidas: int = 0
@@ -103,6 +203,7 @@ class EstadoConversa:
     esclarecimento: list[str] | None = None
     slots: dict = field(default_factory=dict)
     encaminhado: bool = False
+    etapa_reserva: str | None = None
 
     def reiniciar(self) -> None:
         """Volta o estado ao inicio da conversa."""
@@ -111,14 +212,20 @@ class EstadoConversa:
         self.esclarecimento = None
         self.slots = {}
         self.encaminhado = False
+        self.etapa_reserva = None
+
+    def encerrar_reserva(self) -> None:
+        """Descarta a reserva em andamento (slots e etapa)."""
+        self.slots = {}
+        self.etapa_reserva = None
 
 
 @dataclass
 class Resposta:
     """Resposta da Maresia a uma mensagem.
 
-    tipo: "regra", "aceita", "esclarecimento", "abstencao", "fallback"
-    ou "encaminhamento".
+    tipo: "regra", "aceita", "esclarecimento", "abstencao", "fallback",
+    "encaminhamento" ou "reserva" (passo do fluxo de reserva).
     """
 
     texto: str
@@ -133,20 +240,66 @@ def carregar_base(caminho=CAMINHO_BASE) -> dict:
         return json.load(arquivo)
 
 
+def _agora_real() -> datetime:
+    """Data e hora atuais no FUSO_HORARIO do config."""
+    return datetime.now(ZoneInfo(FUSO_HORARIO))
+
+
+def _minutos(hhmm: str) -> int:
+    """'20:30' -> 1230 (minutos desde a meia-noite)."""
+    hora, minuto = hhmm.split(":")
+    return int(hora) * 60 + int(minuto)
+
+
+def _hhmm(minutos: int) -> str:
+    """1230 -> '20:30'."""
+    return f"{minutos // 60:02d}:{minutos % 60:02d}"
+
+
+def _data_por_extenso(dia: date) -> str:
+    """date(2026, 11, 21) -> 'sábado, 21 de novembro de 2026'."""
+    return (
+        f"{_NOMES_DIAS[dia.weekday()]}, {dia.day} de "
+        f"{_NOMES_MESES[dia.month - 1]} de {dia.year}"
+    )
+
+
+def _no_dia(dia: date) -> str:
+    """Artigo + dia da semana: 'na segunda-feira', 'no sábado'."""
+    artigo = "no" if dia.weekday() >= 5 else "na"
+    return f"{artigo} {_NOMES_DIAS[dia.weekday()]}"
+
+
+def _plural(n: int, singular: str, plural: str) -> str:
+    """1 -> '1 pessoa'; 4 -> '4 pessoas'."""
+    return f"{n} {singular if n == 1 else plural}"
+
+
 class GerenciadorDialogo:
     """Decide a resposta de cada mensagem e atualiza o EstadoConversa."""
 
-    def __init__(self, modelo, base: dict | None = None, aleatorio: random.Random | None = None):
+    def __init__(
+        self,
+        modelo,
+        base: dict | None = None,
+        aleatorio: random.Random | None = None,
+        agora: Callable[[], datetime] | None = None,
+    ):
         """modelo: pipeline treinado; base: base de conhecimento (carregada
         de CAMINHO_BASE se omitida); aleatorio: gerador para sortear entre
-        as variacoes de cada mensagem (permite resultados fixos nos testes).
+        as variacoes de cada mensagem; agora: funcao que devolve o datetime
+        atual no FUSO_HORARIO (padrao: relogio real). Os dois ultimos
+        permitem resultados fixos nos testes.
         """
         self.modelo = modelo
         self.base = base if base is not None else carregar_base()
         self.aleatorio = aleatorio or random.Random()
+        self.agora = agora or _agora_real
         self.respostas_fixas = {
             item["intencao"]: item["respostas_fixas"] for item in self.base["intencoes"]
         }
+        self.regras_reserva = self.base["reserva"]
+        self.funcionamento = self.base["funcionamento"]["dias"]
         nome = self.base["restaurante"]["nome"]
         assuntos = list(NOMES_INTENCOES.values())
         self._campos_texto = {
@@ -159,12 +312,15 @@ class GerenciadorDialogo:
     # --- Entrada principal ----------------------------------------------------
 
     def responder(self, mensagem: str, estado: EstadoConversa) -> Resposta:
-        """Responde a mensagem: regras prioritarias primeiro, depois o modelo."""
-        resposta = self._aplicar_regras(preprocessar(mensagem), estado)
+        """Responde a mensagem: regras, depois reserva em andamento, depois o modelo."""
+        texto = preprocessar(mensagem)
+        resposta = self._aplicar_regras(texto, estado)
         if resposta is not None:
             return resposta
+        if estado.etapa_reserva is not None:
+            return self._continuar_reserva(mensagem, texto, estado)
         decisao = self._ajustar_decisao(classificar(self.modelo, mensagem), mensagem)
-        return self._tratar_decisao(decisao, estado)
+        return self._tratar_decisao(decisao, estado, mensagem)
 
     # --- Regras prioritarias --------------------------------------------------
 
@@ -172,15 +328,19 @@ class GerenciadorDialogo:
         """Testa as regras na ordem: atendente, cancelar, ajuda, saudacao/despedida.
 
         Qualquer regra que case zera falhas_seguidas: a mensagem foi entendida.
+        Com uma reserva em andamento, cancelar encerra o fluxo e as demais
+        regras (ajuda, saudacao, despedida) lembram o passo pendente.
         """
+        em_reserva = estado.etapa_reserva is not None
+
         if _RE_ATENDENTE.search(texto):
             estado.falhas_seguidas = 0
             estado.encaminhado = True
             return Resposta(self._encaminhamento(_ENCAMINHAR_POR_PEDIDO), None, "encaminhamento")
 
-        if _RE_CANCELAR.match(texto):
+        if _RE_CANCELAR.match(texto) or (em_reserva and _RE_CANCELAR_NO_FLUXO.search(texto)):
             estado.falhas_seguidas = 0
-            estado.slots = {}
+            estado.encerrar_reserva()
             estado.esclarecimento = None
             return Resposta(MENSAGENS_REGRAS["cancelar"], None, "regra")
 
@@ -192,6 +352,8 @@ class GerenciadorDialogo:
             if regex.match(texto):
                 estado.falhas_seguidas = 0
                 texto_resposta = MENSAGENS_REGRAS[nome].format(**self._campos_texto)
+                if em_reserva:
+                    texto_resposta += "\n\n" + self._lembrete(estado)
                 return Resposta(texto_resposta, None, "regra")
         return None
 
@@ -218,7 +380,7 @@ class GerenciadorDialogo:
             return True  # modelo sem o vetorizador esperado: nao ajusta nada
         return any(palavra in vocabulario for palavra in preprocessar(mensagem).split())
 
-    def _tratar_decisao(self, decisao: Decisao, estado: EstadoConversa) -> Resposta:
+    def _tratar_decisao(self, decisao: Decisao, estado: EstadoConversa, mensagem: str) -> Resposta:
         """Transforma a Decisao do modelo em Resposta e atualiza o estado."""
         pendente = estado.esclarecimento
 
@@ -228,7 +390,7 @@ class GerenciadorDialogo:
             estado.falhas_seguidas = 0
             estado.esclarecimento = None
             estado.assunto_anterior = decisao.intencao
-            texto = self._responder_intencao(decisao.intencao, estado, resolveu=pendente)
+            texto = self._responder_intencao(decisao.intencao, estado, mensagem, resolveu=pendente)
             return Resposta(texto, decisao.intencao, "aceita", decisao.confianca)
 
         if decisao.tipo == "esclarecimento":
@@ -252,28 +414,42 @@ class GerenciadorDialogo:
 
         # Fallback: nao entendeu. Na MAX_FALHAS_SEGUIDAS-esima falha seguida,
         # oferece um atendente humano e recomeca a contagem.
+        resposta = self._registrar_falha(estado, decisao.confianca)
+        if resposta is not None:
+            return resposta
+        return Resposta(self._sortear(self.base["fallback"]), None, "fallback", decisao.confianca)
+
+    def _registrar_falha(self, estado: EstadoConversa, confianca: float | None) -> Resposta | None:
+        """Conta uma falha; devolve o encaminhamento se chegou ao limite."""
         estado.falhas_seguidas += 1
         if estado.falhas_seguidas >= MAX_FALHAS_SEGUIDAS:
             estado.falhas_seguidas = 0
             estado.encaminhado = True
             return Resposta(
-                self._encaminhamento(_ENCAMINHAR_POR_FALHAS), None, "encaminhamento",
-                decisao.confianca,
+                self._encaminhamento(_ENCAMINHAR_POR_FALHAS), None, "encaminhamento", confianca
             )
-        return Resposta(self._sortear(self.base["fallback"]), None, "fallback", decisao.confianca)
+        return None
 
     # --- Respostas ------------------------------------------------------------
 
     def _responder_intencao(
-        self, intencao: str, estado: EstadoConversa, resolveu: list[str] | None = None
+        self,
+        intencao: str,
+        estado: EstadoConversa,
+        mensagem: str = "",
+        resolveu: list[str] | None = None,
     ) -> str:
         """Monta a resposta de uma intencao aceita.
 
-        Por enquanto usa as respostas_fixas da base. Ponto de extensao para
-        respostas detalhadas por intencao (pratos, reserva com slots,
-        horarios do dia...). `resolveu` traz as candidatas do esclarecimento
-        que esta resposta encerrou, se houver.
+        Ponto de extensao para respostas detalhadas por intencao. Hoje:
+        - reserva: abre o fluxo de reserva (ou responde a politica, se a
+          mensagem fala de cancelar/alterar/atrasar uma reserva existente);
+        - demais: respostas_fixas da base.
+        `resolveu` traz as candidatas do esclarecimento que esta resposta
+        encerrou, se houver.
         """
+        if intencao == "reserva":
+            return self._iniciar_reserva(mensagem, estado)
         return self._sortear(self.respostas_fixas[intencao])
 
     def _encaminhamento(self, indice: int) -> str:
@@ -284,3 +460,332 @@ class GerenciadorDialogo:
     def _sortear(self, opcoes: list[str]) -> str:
         """Escolhe uma das variacoes de uma mensagem."""
         return self.aleatorio.choice(opcoes)
+
+    # --- Reserva: fluxo -------------------------------------------------------
+
+    def _iniciar_reserva(self, mensagem: str, estado: EstadoConversa) -> str:
+        """Abre o fluxo de reserva, ja aproveitando os slots da mensagem.
+
+        Se a mensagem e sobre uma reserva existente (cancelar, alterar,
+        atraso), responde a politica da base em vez de abrir uma reserva nova.
+        """
+        texto = preprocessar(mensagem)
+        for chave, regex in _RE_POLITICAS:
+            if regex.search(texto):
+                return self.regras_reserva[chave]
+
+        estado.etapa_reserva = "coletando"
+        estado.slots = {}
+        novos = self._extrair_slots(mensagem, estado)
+        if novos:
+            return self._preencher_slots(novos, estado)
+        return MENSAGENS_RESERVA["inicio"] + " " + self._pergunta(estado)
+
+    def _continuar_reserva(self, mensagem: str, texto: str, estado: EstadoConversa) -> Resposta:
+        """Trata uma mensagem com a reserva em andamento (regras ja testadas).
+
+        Ordem: "sim" na confirmacao; slots novos ou corrigidos (sem passar
+        pelo classificador); "nao"/qual slot alterar; e, por fim, o
+        classificador, para perguntas de outro assunto no meio da reserva.
+        """
+        if estado.etapa_reserva == "confirmando" and _RE_SIM.match(texto):
+            estado.falhas_seguidas = 0
+            return Resposta(self._registrar_reserva(estado), "reserva", "reserva")
+
+        decisao = None
+        novos = self._extrair_slots(mensagem, estado)
+        if not novos and self._slot_pendente(estado) == "nome" and self._parece_nome(mensagem, texto):
+            # Resposta curta como "Murilo": so vira nome se o classificador
+            # nao reconhecer nela uma pergunta de outro assunto.
+            decisao = self._ajustar_decisao(classificar(self.modelo, mensagem), mensagem)
+            if not (decisao.tipo == "aceita" and decisao.intencao != "reserva"):
+                novos = {"nome": self._formatar_nome(mensagem)}
+        if novos:
+            estado.falhas_seguidas = 0
+            return Resposta(self._preencher_slots(novos, estado), "reserva", "reserva")
+
+        alterar = self._slot_a_alterar(texto, estado)
+        if alterar is not None:
+            estado.falhas_seguidas = 0
+            return Resposta(alterar, "reserva", "reserva")
+
+        if decisao is None:
+            decisao = self._ajustar_decisao(classificar(self.modelo, mensagem), mensagem)
+        return self._decisao_no_meio_da_reserva(decisao, estado)
+
+    def _decisao_no_meio_da_reserva(self, decisao: Decisao, estado: EstadoConversa) -> Resposta:
+        """Responde o classificador sem perder os slots e lembra o passo pendente."""
+        lembrete = self._lembrete(estado)
+
+        if decisao.tipo == "aceita":
+            estado.falhas_seguidas = 0
+            if decisao.intencao == "reserva":
+                # Continua falando da reserva: so repete o passo pendente.
+                return Resposta(self._pergunta(estado), "reserva", "reserva", decisao.confianca)
+            estado.assunto_anterior = decisao.intencao
+            texto = self._responder_intencao(decisao.intencao, estado)
+            return Resposta(texto + "\n\n" + lembrete, decisao.intencao, "aceita", decisao.confianca)
+
+        if decisao.tipo == "abstencao":
+            estado.falhas_seguidas = 0
+            texto = self._sortear(self.respostas_fixas[INTENCAO_FORA_ESCOPO])
+            return Resposta(
+                texto + "\n\n" + lembrete, INTENCAO_FORA_ESCOPO, "abstencao", decisao.confianca
+            )
+
+        if decisao.tipo == "esclarecimento":
+            # No meio da reserva nao abrimos outra pergunta: so repetimos o
+            # passo pendente. Nao conta como falha.
+            texto = MENSAGENS_RESERVA["nao_tenho_certeza"] + " " + self._pergunta(estado)
+            return Resposta(texto, None, "esclarecimento", decisao.confianca)
+
+        # Fallback: conta como falha e repete a pergunta do slot pendente.
+        resposta = self._registrar_falha(estado, decisao.confianca)
+        if resposta is not None:
+            return resposta
+        texto = MENSAGENS_RESERVA["nao_entendi"] + " " + self._pergunta(estado)
+        return Resposta(texto, None, "fallback", decisao.confianca)
+
+    def _slot_a_alterar(self, texto: str, estado: EstadoConversa) -> str | None:
+        """Trata "nao" no resumo e pedidos como "quero mudar o horario".
+
+        Devolve o texto da resposta ou None se a mensagem nao e isso.
+        """
+        confirmando = estado.etapa_reserva == "confirmando"
+        todos_preenchidos = all(slot in estado.slots for slot in SLOTS_RESERVA)
+        negou = confirmando and _RE_NAO.match(texto)
+        # Depois do "nao", a etapa volta para "coletando" com todos os slots
+        # preenchidos: a resposta a "o que quer alterar?" pode ser so "o horario".
+        # No resumo, sem "nao", exige um verbo de mudanca, para "qual o horario
+        # de domingo?" nao apagar o horario da reserva.
+        respondendo_alteracao = not confirmando and todos_preenchidos
+        pediu_mudanca = confirmando and _RE_VERBO_ALTERAR.search(texto)
+        if not (negou or respondendo_alteracao or pediu_mudanca):
+            return None
+        for slot, regex in _RE_SLOT_ALTERAR.items():
+            if regex.search(texto):
+                estado.slots.pop(slot, None)
+                estado.etapa_reserva = "coletando"
+                return self._pergunta(estado)
+        if negou:
+            estado.etapa_reserva = "coletando"
+            return MENSAGENS_RESERVA["o_que_alterar"]
+        return None
+
+    def _preencher_slots(self, novos: dict, estado: EstadoConversa) -> str:
+        """Grava os slots novos, valida e pergunta o proximo (ou mostra o resumo)."""
+        estado.slots.update(novos)
+        erro = self._validar(estado)
+        if erro is not None:
+            # O slot invalido foi apagado: volta a coletar (mesmo se estava
+            # no resumo, corrigindo um dado).
+            estado.etapa_reserva = "coletando"
+            return erro + " " + self._pergunta(estado)
+        if self._slot_pendente(estado) is None:
+            estado.etapa_reserva = "confirmando"
+            return self._resumo(estado)
+        estado.etapa_reserva = "coletando"
+        return self._pergunta(estado)
+
+    def _registrar_reserva(self, estado: EstadoConversa) -> str:
+        """Confirma a reserva (simulada: nada e gravado) e encerra o fluxo."""
+        campos = self._campos_reserva(estado)
+        texto = MENSAGENS_RESERVA["registrada"].format(
+            politica_atraso=self.regras_reserva["politica_atraso"], **campos
+        )
+        estado.encerrar_reserva()
+        return texto
+
+    # --- Reserva: extracao ----------------------------------------------------
+
+    def _extrair_slots(self, mensagem: str, estado: EstadoConversa) -> dict:
+        """Extrai da mensagem os slots da reserva com extrair_entidades.
+
+        Respostas curtas so com um numero ("4", "quatro", "20") sao lidas
+        de acordo com o slot que esta sendo pedido.
+        """
+        agora = self.agora()
+        entidades = extrair_entidades(mensagem, agora)
+        pendente = self._slot_pendente(estado)
+
+        if not any(entidades[k] for k in ("pessoas", "data", "horario", "horario_ambiguo", "nome")):
+            if _RE_SO_NUMERO.match(preprocessar(mensagem)) and pendente in ("pessoas", "horario"):
+                # Da a extrair_entidades o contexto da pergunta feita e so
+                # aproveita o slot perguntado ("mesa para Carlos" nao vira nome).
+                contexto = "mesa para" if pendente == "pessoas" else "as"
+                com_contexto = extrair_entidades(f"{contexto} {mensagem}", agora)
+                for chave in ("pessoas",) if pendente == "pessoas" else ("horario", "horario_ambiguo"):
+                    entidades[chave] = com_contexto[chave]
+
+        novos = {}
+        for slot in ("pessoas", "data", "nome"):
+            if entidades[slot]:
+                novos[slot] = entidades[slot]
+        if entidades["horario"]:
+            novos["horario"] = entidades["horario"]
+        elif entidades["horario_ambiguo"]:
+            data = novos.get("data") or estado.slots.get("data")
+            novos["horario"] = self._resolver_horario_ambiguo(entidades["horario_ambiguo"], data)
+        return novos
+
+    def _resolver_horario_ambiguo(self, ambiguo: str, data_iso: str | None) -> str:
+        """'08:00|20:00' -> a opcao que cai num horario de reserva.
+
+        Com a data conhecida, usa o funcionamento daquele dia; sem ela, o de
+        qualquer dia aberto. Se nenhuma servir, fica com a da tarde/noite.
+        """
+        opcoes = ambiguo.split("|")
+        if data_iso:
+            dias = [_CHAVES_DIAS[date.fromisoformat(data_iso).weekday()]]
+        else:
+            dias = list(_CHAVES_DIAS)
+        for opcao in opcoes:
+            if any(self._horario_permitido(dia, opcao) for dia in dias):
+                return opcao
+        return opcoes[-1]
+
+    def _parece_nome(self, mensagem: str, texto: str) -> bool:
+        """Mensagem curta, so com letras, que pode ser um nome ("Murilo")."""
+        return bool(_RE_PARECE_NOME.match(mensagem.strip())) and not (
+            _RE_SIM.match(texto) or _RE_NAO.match(texto)
+        )
+
+    @staticmethod
+    def _formatar_nome(mensagem: str) -> str:
+        """'ana paula' -> 'Ana Paula'."""
+        return " ".join(p[:1].upper() + p[1:].lower() for p in mensagem.split())
+
+    # --- Reserva: validacao ---------------------------------------------------
+
+    def _validar(self, estado: EstadoConversa) -> str | None:
+        """Valida os slots preenchidos; no 1o erro, apaga o slot e devolve o motivo.
+
+        Ordem: pessoas, data (dia fechado, passado, janela), horario
+        (funcionamento do dia) e antecedencia minima.
+        """
+        slots, regras = estado.slots, self.regras_reserva
+        agora = self.agora()
+        hoje = agora.date()
+
+        pessoas = slots.get("pessoas")
+        if pessoas is not None:
+            if pessoas < regras["min_pessoas"]:
+                slots.pop("pessoas")
+                return MENSAGENS_RESERVA["pessoas_minimo"].format(
+                    minimo=_plural(regras["min_pessoas"], "pessoa", "pessoas")
+                )
+            if pessoas > regras["max_pessoas"]:
+                # Acima do limite do bot: nao reserva e oferece um atendente.
+                slots.pop("pessoas")
+                estado.encaminhado = True
+                restaurante = self.base["restaurante"]
+                return MENSAGENS_RESERVA["acima_limite"].format(
+                    mensagem=regras["mensagem_acima_limite"],
+                    whatsapp=restaurante["whatsapp"],
+                    telefone=restaurante["telefone"],
+                )
+
+        data = date.fromisoformat(slots["data"]) if "data" in slots else None
+        if data is not None:
+            limite = hoje + timedelta(days=regras["antecedencia_maxima_dias"])
+            erro = None
+            if not self.funcionamento[_CHAVES_DIAS[data.weekday()]]["aberto"]:
+                no_dia = _no_dia(data)
+                erro = MENSAGENS_RESERVA["fechado"].format(No_dia=no_dia[0].upper() + no_dia[1:])
+            elif data < hoje:
+                erro = MENSAGENS_RESERVA["passado"]
+            elif data > limite:
+                erro = MENSAGENS_RESERVA["alem_janela"].format(
+                    dias=regras["antecedencia_maxima_dias"], limite=_data_por_extenso(limite)
+                )
+            if erro is not None:
+                slots.pop("data")
+                return erro
+
+        horario = slots.get("horario")
+        if data is not None and horario is not None:
+            if not self._horario_permitido(_CHAVES_DIAS[data.weekday()], horario):
+                slots.pop("horario")
+                return MENSAGENS_RESERVA["horario_fora"].format(janelas=self._janelas_texto(data))
+            momento = datetime.combine(
+                data, datetime.strptime(horario, "%H:%M").time(), tzinfo=agora.tzinfo
+            )
+            horas = regras["antecedencia_minima_horas"]
+            if momento - agora < timedelta(hours=horas):
+                slots.pop("horario")
+                return MENSAGENS_RESERVA["antecedencia"].format(
+                    horas=_plural(horas, "hora", "horas")
+                )
+        return None
+
+    def _janelas_reserva(self, chave_dia: str) -> list[tuple[int, int]]:
+        """Faixas de horario de reserva do dia, em minutos: [(abre, ultima), ...].
+
+        Regra da base (reserva.janela): do horario de abertura de cada turno
+        ate ultima_reserva_minutos_antes_fechar antes do fechamento.
+        """
+        dia = self.funcionamento[chave_dia]
+        if not dia["aberto"]:
+            return []
+        antes = self.regras_reserva["janela"]["ultima_reserva_minutos_antes_fechar"]
+        janelas = []
+        for turno in _TURNOS:
+            if dia.get(turno):
+                janelas.append((_minutos(dia[turno]["abre"]), _minutos(dia[turno]["fecha"]) - antes))
+        return janelas
+
+    def _horario_permitido(self, chave_dia: str, horario: str) -> bool:
+        """Diz se o horario cai numa faixa de reserva daquele dia."""
+        minutos = _minutos(horario)
+        return any(inicio <= minutos <= fim for inicio, fim in self._janelas_reserva(chave_dia))
+
+    def _janelas_texto(self, dia: date) -> str:
+        """'No sábado aceitamos reservas das 11:30 às 14:30 e das 18:30 às 22:30.'"""
+        faixas = " e ".join(
+            f"das {_hhmm(inicio)} às {_hhmm(fim)}"
+            for inicio, fim in self._janelas_reserva(_CHAVES_DIAS[dia.weekday()])
+        )
+        no_dia = _no_dia(dia)
+        return f"{no_dia[0].upper() + no_dia[1:]} aceitamos reservas {faixas}."
+
+    # --- Reserva: textos ------------------------------------------------------
+
+    @staticmethod
+    def _slot_pendente(estado: EstadoConversa) -> str | None:
+        """Primeiro slot que falta, na ordem de SLOTS_RESERVA."""
+        for slot in SLOTS_RESERVA:
+            if slot not in estado.slots:
+                return slot
+        return None
+
+    def _pergunta(self, estado: EstadoConversa) -> str:
+        """Pergunta do passo atual: o slot que falta ou a confirmacao."""
+        slot = self._slot_pendente(estado)
+        if slot is None:
+            if estado.etapa_reserva == "confirmando":
+                return MENSAGENS_RESERVA["confirmar_de_novo"]
+            return MENSAGENS_RESERVA["o_que_alterar"]
+        if slot == "horario":
+            janelas = ""
+            if "data" in estado.slots:
+                janelas = self._janelas_texto(date.fromisoformat(estado.slots["data"]))
+            return MENSAGENS_RESERVA["pergunta_horario"].format(janelas=janelas).strip()
+        return MENSAGENS_RESERVA[f"pergunta_{slot}"]
+
+    def _lembrete(self, estado: EstadoConversa) -> str:
+        """Lembra o cliente do passo pendente da reserva."""
+        return MENSAGENS_RESERVA["lembrete"].format(pergunta=self._pergunta(estado))
+
+    def _campos_reserva(self, estado: EstadoConversa) -> dict:
+        """Slots formatados para o resumo e a confirmacao."""
+        slots = estado.slots
+        return {
+            "pessoas": _plural(slots["pessoas"], "pessoa", "pessoas"),
+            "data": _data_por_extenso(date.fromisoformat(slots["data"])),
+            "horario": slots["horario"],
+            "nome": slots["nome"],
+        }
+
+    def _resumo(self, estado: EstadoConversa) -> str:
+        """Resumo da reserva pedindo confirmacao."""
+        return MENSAGENS_RESERVA["resumo"].format(**self._campos_reserva(estado))
