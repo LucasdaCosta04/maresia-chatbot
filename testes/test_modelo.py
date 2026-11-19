@@ -9,6 +9,8 @@ from chatbot.modelo import (
     carregar_modelo,
     classificar,
     decidir,
+    detectar_pedidos_multiplos,
+    dividir_pedidos,
     prever_probabilidades,
     salvar_modelo,
     treinar_modelo,
@@ -169,3 +171,114 @@ def test_salvar_e_carregar(modelo, tmp_path):
 def test_carregar_modelo_inexistente_da_erro_claro(tmp_path):
     with pytest.raises(FileNotFoundError, match="python treinar.py"):
         carregar_modelo(tmp_path / "nao_existe.joblib")
+
+
+# --- dividir_pedidos ------------------------------------------------------------
+
+@pytest.mark.parametrize("separador", ["?", "!", ";", "."])
+def test_dividir_por_pontuacao(separador):
+    assert dividir_pedidos(f"quero reservar{separador} ver o cardapio") == [
+        "quero reservar", "ver o cardapio"
+    ]
+
+
+@pytest.mark.parametrize(
+    "conjuncao",
+    ["e", "E", "mas", "MAS", "e também", "e tambem", "E TAMBÉM", "além disso", "alem disso"],
+)
+def test_dividir_por_conjuncao(conjuncao):
+    assert dividir_pedidos(f"quero reservar {conjuncao} ver o cardapio") == [
+        "quero reservar", "ver o cardapio"
+    ]
+
+
+def test_conjuncao_composta_antes_de_e_sozinho():
+    # Se "e" casasse primeiro, sobraria "também ver o cardápio" no 2o trecho.
+    assert dividir_pedidos("quero reservar e também ver o cardápio") == [
+        "quero reservar", "ver o cardápio"
+    ]
+
+
+def test_varias_divisoes_na_mesma_mensagem():
+    texto = "Que horas abrem? Tem prato vegano, e além disso quero reservar uma mesa."
+    assert dividir_pedidos(texto) == ["Que horas abrem", "Tem prato vegano", "quero reservar uma mesa"]
+
+
+@pytest.mark.parametrize(
+    "texto", ["tem camarão, lula ou polvo hoje", "pode ser sexta ou sábado à noite"]
+)
+def test_virgula_e_ou_nao_dividem(texto):
+    assert dividir_pedidos(texto) == [texto]
+
+
+@pytest.mark.parametrize("texto", ["tem estacionamento", "o estacionamento é próprio", "esse prato"])
+def test_e_dentro_de_palavra_nao_divide(texto):
+    assert dividir_pedidos(texto) == [texto]
+
+
+def test_e_acentuado_nao_divide():
+    # "é" (verbo) nao e a conjuncao "e".
+    assert dividir_pedidos("o pudim é sem lactose") == ["o pudim é sem lactose"]
+
+
+def test_ponto_entre_digitos_nao_divide():
+    assert dividir_pedidos("custa 59.90 a porção") == ["custa 59.90 a porção"]
+
+
+def test_trechos_curtos_sao_descartados():
+    assert dividir_pedidos("arroz e feijão") == []
+    assert dividir_pedidos("quero reservar uma mesa e sim") == ["quero reservar uma mesa"]
+
+
+def test_texto_vazio():
+    assert dividir_pedidos("") == []
+
+
+# --- detectar_pedidos_multiplos (modelo treinado) -------------------------------
+
+T14 = "quero reservar uma mesa para sábado e também saber se vocês têm prato sem glúten"
+
+
+def test_t14_vira_esclarecimento(modelo):
+    decisao = detectar_pedidos_multiplos(modelo, T14)
+    assert decisao is not None
+    assert decisao.tipo == "esclarecimento"
+    assert decisao.candidatas == [RES, CARD]
+    assert decisao.probabilidades == pytest.approx(prever_probabilidades(modelo, T14))
+    assert decisao.confianca == pytest.approx(max(decisao.probabilidades.values()))
+
+
+def test_candidatas_na_ordem_do_texto(modelo):
+    texto = "vocês têm prato sem glúten? quero reservar uma mesa para sábado"
+    assert detectar_pedidos_multiplos(modelo, texto).candidatas == [CARD, RES]
+
+
+def test_tres_assuntos(modelo):
+    texto = "que horas vocês abrem? tem prato vegano? quero reservar uma mesa"
+    assert detectar_pedidos_multiplos(modelo, texto).candidatas == [HOR, CARD, RES]
+
+
+def test_um_assunto_so_devolve_none(modelo):
+    assert detectar_pedidos_multiplos(modelo, "quero reservar uma mesa para 4 pessoas") is None
+
+
+@pytest.mark.parametrize(
+    "texto, intencao",
+    [
+        ("que horas vocês abrem e tem estacionamento?", HOR),
+        ("tem prato sem glúten e a moqueca leva leite?", CARD),
+    ],
+)
+def test_dois_trechos_da_mesma_intencao_devolve_none(modelo, texto, intencao):
+    trechos = dividir_pedidos(texto)
+    assert len(trechos) == 2
+    for trecho in trechos:
+        decisao = classificar(modelo, trecho)
+        assert (decisao.tipo, decisao.intencao) == ("aceita", intencao)
+    assert detectar_pedidos_multiplos(modelo, texto) is None
+
+
+def test_fora_escopo_nao_conta_como_pedido(modelo):
+    texto = "quero reservar uma mesa e qual a previsão do tempo amanhã"
+    assert classificar(modelo, "qual a previsão do tempo amanhã").intencao == FORA
+    assert detectar_pedidos_multiplos(modelo, texto) is None

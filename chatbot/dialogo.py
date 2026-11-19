@@ -5,8 +5,11 @@ Para cada mensagem, nesta ordem:
    avaliadas sobre o texto pre-processado, antes do classificador;
 2. se ha uma reserva em andamento, a mensagem e lida como resposta ao passo
    atual (slots via extrair_entidades, confirmacao sim/nao);
-3. classificador de intencoes + politica de decisao (modelo.classificar);
-4. tratamento da decisao: aceita, esclarecimento, abstencao ou fallback,
+3. pedidos multiplos (modelo.detectar_pedidos_multiplos): assuntos
+   diferentes na mesma mensagem viram "por qual comecamos?";
+4. classificador de intencoes + politica de decisao (modelo.classificar),
+   com heranca de contexto do turno anterior;
+5. tratamento da decisao: aceita, esclarecimento, abstencao ou fallback,
    com encaminhamento humano depois de MAX_FALHAS_SEGUIDAS falhas.
 
 Os textos de fallback, esclarecimento, encaminhamento humano, as respostas
@@ -30,7 +33,7 @@ from chatbot.config import (
     MAX_FALHAS_SEGUIDAS,
 )
 from chatbot.entidades import extrair_entidades
-from chatbot.modelo import Decisao, classificar
+from chatbot.modelo import Decisao, classificar, detectar_pedidos_multiplos
 from chatbot.preprocessamento import preprocessar
 
 # Nome de cada intencao como o cliente le (usado no esclarecimento e na ajuda).
@@ -55,6 +58,7 @@ MENSAGENS_REGRAS = {
         "Posso ajudar com {assunto_1}, {assunto_2} ou {assunto_3}. Em que posso ajudar? 🌊"
     ),
     "despedida": "Eu que agradeço! Até mais e bom apetite. 🌊",
+    "pedidos_multiplos": "Você pediu mais de uma coisa: {assuntos}. Por qual começamos?",
 }
 
 # Textos do fluxo de reserva (a base so tem as regras e as politicas).
@@ -401,7 +405,16 @@ class GerenciadorDialogo:
         if resposta is not None:
             return resposta
         if estado.etapa_reserva is not None:
+            # No meio da reserva, "4 pessoas e sabado" e preenchimento de
+            # slots, nao pedido multiplo: por isso a deteccao vem depois.
             return self._continuar_reserva(mensagem, texto, estado)
+
+        multiplos = detectar_pedidos_multiplos(self.modelo, mensagem)
+        if multiplos is not None:
+            resposta = self._perguntar_por_onde_comecar(multiplos, estado)
+            resposta.probabilidades = multiplos.probabilidades
+            return resposta
+
         decisao = self._ajustar_decisao(classificar(self.modelo, mensagem), mensagem)
         resposta = self._herdar_contexto(mensagem, texto, decisao, estado)
         if resposta is None:
@@ -511,6 +524,21 @@ class GerenciadorDialogo:
         except (AttributeError, KeyError):
             return True  # modelo sem o vetorizador esperado: nao ajusta nada
         return any(palavra in vocabulario for palavra in preprocessar(mensagem).split())
+
+    def _perguntar_por_onde_comecar(self, decisao: Decisao, estado: EstadoConversa) -> Resposta:
+        """Mensagem com pedidos de assuntos diferentes: lista e pergunta por qual comecar.
+
+        Reaproveita estado.esclarecimento (com 2 ou mais candidatas): no turno
+        seguinte, a intencao aceita resolve o pendente, como no esclarecimento
+        comum. Nao conta como falha nem zera o contador.
+        """
+        estado.esclarecimento = list(decisao.candidatas)
+        assuntos = "; ".join(
+            f"{n}) {NOMES_INTENCOES.get(intencao, intencao)}"
+            for n, intencao in enumerate(decisao.candidatas, start=1)
+        )
+        texto = MENSAGENS_REGRAS["pedidos_multiplos"].format(assuntos=assuntos)
+        return Resposta(texto, None, "esclarecimento", decisao.confianca)
 
     def _tratar_decisao(self, decisao: Decisao, estado: EstadoConversa, mensagem: str) -> Resposta:
         """Transforma a Decisao do modelo em Resposta e atualiza o estado."""

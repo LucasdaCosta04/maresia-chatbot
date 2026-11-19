@@ -47,6 +47,11 @@ INTENCAO_FORA_ESCOPO = "fora_escopo"
 # Numero de dobras da validacao cruzada estratificada.
 FOLDS_VALIDACAO = 5
 
+# --- Pedidos multiplos ---
+# Trechos com menos palavras que isso sao descartados, para "arroz e feijao"
+# nao virar dois pedidos.
+MIN_PALAVRAS_PEDIDO = 2
+
 # --- API ---
 # Tamanho maximo (em caracteres) de uma mensagem recebida pela API.
 MAX_CARACTERES_MENSAGEM = 500

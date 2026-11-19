@@ -631,3 +631,62 @@ def test_reiniciar_limpa_a_memoria():
     estado = EstadoConversa(ultimo_prato="lula_a_dore", ultima_data="2026-11-21")
     estado.reiniciar()
     assert estado == EstadoConversa()
+
+
+# --- Pedidos multiplos ----------------------------------------------------------
+
+T14 = "quero reservar uma mesa para sábado e também saber se vocês têm prato sem glúten"
+
+
+def test_t14_pergunta_por_onde_comecar(reserva, estado):
+    r = reserva.responder(T14, estado)
+    assert r.tipo == "esclarecimento"
+    assert r.texto.endswith("Por qual começamos?")
+    assert "1) reservas" in r.texto
+    assert "2) cardápio e alergênicos" in r.texto
+    assert r.probabilidades
+    assert estado.esclarecimento == ["reserva", "cardapio_alergenicos"]
+    assert estado.etapa_reserva is None
+
+
+def test_t14_resolvido_com_a_reserva(reserva, estado):
+    reserva.responder(T14, estado)
+    r = reserva.responder("a reserva", estado)
+    assert r.tipo == "aceita"
+    assert r.intencao == "reserva"
+    assert estado.esclarecimento is None
+    assert estado.etapa_reserva == "coletando"
+    assert r.texto.endswith(MENSAGENS_RESERVA["pergunta_pessoas"])
+
+
+def test_t14_resolvido_com_o_cardapio(reserva, estado):
+    reserva.responder(T14, estado)
+    r = reserva.responder("sobre o cardápio", estado)
+    assert r.intencao == "cardapio_alergenicos"
+    assert estado.esclarecimento is None
+    assert estado.etapa_reserva is None
+
+
+def test_tres_pedidos_resolvidos_no_turno_seguinte(reserva, estado):
+    r = reserva.responder("que horas vocês abrem? tem prato vegano? quero reservar uma mesa", estado)
+    assert "3) reservas" in r.texto
+    assert estado.esclarecimento == ["horario_localizacao", "cardapio_alergenicos", "reserva"]
+    r = reserva.responder("que horas vocês abrem no sábado?", estado)
+    assert r.intencao == "horario_localizacao"
+    assert estado.esclarecimento is None
+
+
+def test_pedido_multiplo_nao_conta_como_falha(reserva, estado):
+    estado.falhas_seguidas = 1
+    reserva.responder(T14, estado)
+    assert estado.falhas_seguidas == 1
+    assert estado.encaminhado is False
+
+
+def test_no_meio_da_reserva_e_preenchimento_de_slots(reserva, estado):
+    reserva.responder("quero reservar uma mesa", estado)
+    r = reserva.responder("para 4 pessoas e no sábado", estado)
+    assert r.tipo == "reserva"
+    assert estado.slots == {"pessoas": 4, "data": "2026-11-21"}
+    assert estado.esclarecimento is None
+    assert r.texto.startswith("Qual horário")
