@@ -93,6 +93,37 @@ MENSAGENS_RESERVA = {
     "antecedencia": "A reserva precisa ser feita com pelo menos {horas} de antecedência.",
 }
 
+# Textos das respostas com entidades (horario de um dia e cardapio). Os
+# dados (horarios, pratos, alergenicos, avisos) vem da base.
+MENSAGENS_CONSULTA = {
+    "dia_fechado": "{No_dia} ({data}) o restaurante fica fechado.",
+    "dia_aberto": "{No_dia} ({data}) abrimos {turnos}.",
+    "turno": "no {turno} das {abre} às {fecha}",
+    "prato": "{nome}: {descricao} Serve {serve}. Preço: {preco}.",
+    "prato_alergenicos": "Alergênicos: {lista}.",
+    "prato_sem_alergenicos": "Não leva nenhum dos alergênicos que controlamos.",
+    "prato_pode_conter": "Pode conter traços de: {lista}.",
+    "contem": "Sim, {prato} contém {alergenico}.",
+    "pode_conter": "{Prato} não leva {alergenico} na receita, mas pode conter traços (contaminação cruzada).",
+    "nao_contem": "Não, {prato} não contém {alergenico}.",
+    "restricao_sim": "Sim, {prato} é uma opção {restricao}.",
+    "restricao_nao": "Não, {prato} não é uma opção {restricao}.",
+    "lista_restricao": "Opções {restricao}: {pratos}.",
+    "lista_sem_alergenico": "Pratos sem {alergenico}: {pratos}.",
+    "lista_com_alergenico": "Pratos que levam {alergenico}: {pratos}.",
+    "lista_vazia": "No momento não temos pratos {criterio}.",
+    "prato_ambiguo": "Temos {opcoes}. Sobre qual você quer saber?",
+}
+
+# Restricoes de extrair_entidades -> como aparecem no texto ("opcao vegana").
+_NOMES_RESTRICOES = {
+    "vegetariano": "vegetariana",
+    "vegano": "vegana",
+    "sem_gluten": "sem glúten",
+    "sem_lactose": "sem lactose",
+}
+_NOMES_TURNOS = {"almoco": "almoço", "jantar": "jantar"}
+
 # Indices das mensagens de encaminhamento_humano na base: a 1a fala de
 # "nao estou conseguindo te ajudar" (falhas); a 2a, de "vou te passar para
 # um atendente" (pedido explicito).
@@ -186,6 +217,22 @@ _RE_POLITICAS = (
 )
 
 
+# --- Heranca de contexto ------------------------------------------------------
+
+# Mensagem curta o bastante para ser continuacao do turno anterior.
+MAX_PALAVRAS_HERANCA = 6
+# Pronome que aponta para o prato do turno anterior ("ele tem gluten?").
+_RE_PRONOME = re.compile(
+    r"\b(?:ele|ela|eles|elas|esse|essa|esses|essas|este|isso|isto"
+    r"|dele|dela|nele|nela|desse|dessa|nesse|nessa|disso|nisso)\b"
+)
+# Pista de que o cliente quer EVITAR o alergenico ("sou alergico a camarao",
+# "sem lactose"). Sem ela, "tem camarao?" lista os pratos que levam camarao.
+_RE_EVITAR = re.compile(
+    r"\b(?:sem|alergi\w*|alergic\w*|intoleran\w*|nao (?:como|posso|pode)|evit\w*|restric\w*)\b"
+)
+
+
 @dataclass
 class EstadoConversa:
     """Estado de uma conversa entre uma mensagem e outra.
@@ -196,6 +243,8 @@ class EstadoConversa:
     slots: dados da reserva em andamento (pessoas, data, horario, nome).
     encaminhado: se a conversa ja foi encaminhada para um atendente.
     etapa_reserva: None (sem reserva), "coletando" ou "confirmando".
+    ultimo_prato: id do ultimo prato usado numa resposta aceita.
+    ultima_data: ultima data (ISO) usada numa resposta aceita.
     """
 
     falhas_seguidas: int = 0
@@ -204,6 +253,8 @@ class EstadoConversa:
     slots: dict = field(default_factory=dict)
     encaminhado: bool = False
     etapa_reserva: str | None = None
+    ultimo_prato: str | None = None
+    ultima_data: str | None = None
 
     def reiniciar(self) -> None:
         """Volta o estado ao inicio da conversa."""
@@ -213,6 +264,8 @@ class EstadoConversa:
         self.slots = {}
         self.encaminhado = False
         self.etapa_reserva = None
+        self.ultimo_prato = None
+        self.ultima_data = None
 
     def encerrar_reserva(self) -> None:
         """Descarta a reserva em andamento (slots e etapa)."""
@@ -226,12 +279,15 @@ class Resposta:
 
     tipo: "regra", "aceita", "esclarecimento", "abstencao", "fallback",
     "encaminhamento" ou "reserva" (passo do fluxo de reserva).
+    herdou_contexto: a mensagem foi respondida herdando o assunto (e a
+    entidade que faltava) do turno anterior.
     """
 
     texto: str
     intencao: str | None
     tipo: str
     confianca: float | None = None
+    herdou_contexto: bool = False
 
 
 def carregar_base(caminho=CAMINHO_BASE) -> dict:
@@ -275,6 +331,18 @@ def _plural(n: int, singular: str, plural: str) -> str:
     return f"{n} {singular if n == 1 else plural}"
 
 
+def _juntar(itens: list[str]) -> str:
+    """['a', 'b', 'c'] -> 'a, b e c'."""
+    if len(itens) <= 1:
+        return "".join(itens)
+    return ", ".join(itens[:-1]) + " e " + itens[-1]
+
+
+def _unicos(itens: list) -> list:
+    """Remove repetidos mantendo a ordem."""
+    return list(dict.fromkeys(itens))
+
+
 class GerenciadorDialogo:
     """Decide a resposta de cada mensagem e atualiza o EstadoConversa."""
 
@@ -300,6 +368,8 @@ class GerenciadorDialogo:
         }
         self.regras_reserva = self.base["reserva"]
         self.funcionamento = self.base["funcionamento"]["dias"]
+        self.pratos = {prato["id"]: prato for prato in self.base["cardapio"]}
+        self.alergenicos = self.base["alergenicos"]["itens"]
         nome = self.base["restaurante"]["nome"]
         assuntos = list(NOMES_INTENCOES.values())
         self._campos_texto = {
@@ -320,7 +390,55 @@ class GerenciadorDialogo:
         if estado.etapa_reserva is not None:
             return self._continuar_reserva(mensagem, texto, estado)
         decisao = self._ajustar_decisao(classificar(self.modelo, mensagem), mensagem)
+        resposta = self._herdar_contexto(mensagem, texto, decisao, estado)
+        if resposta is not None:
+            return resposta
         return self._tratar_decisao(decisao, estado, mensagem)
+
+    # --- Heranca de contexto --------------------------------------------------
+
+    def _herdar_contexto(
+        self, mensagem: str, texto: str, decisao: Decisao, estado: EstadoConversa
+    ) -> Resposta | None:
+        """Responde uma continuacao curta ("e no domingo?", "ele tem gluten?")
+        com o assunto do turno anterior, completando a entidade que falta
+        com a memoria do estado. Devolve None quando nao ha heranca.
+
+        Herda quando TODAS valem:
+        a) existe assunto_anterior;
+        b) a mensagem e curta e traz uma entidade util para esse assunto,
+           mas nao o objeto principal (a data, no horario; o prato, com um
+           pronome apontando para ultimo_prato, no cardapio);
+        c) o classificador nao aceitou outra intencao (ex.: "quero
+           reservar uma mesa" depois de uma pergunta de horario nao herda).
+        """
+        assunto = estado.assunto_anterior
+        if assunto is None:
+            return None
+        if len(texto.split()) > MAX_PALAVRAS_HERANCA:
+            return None
+        if decisao.tipo == "aceita" and decisao.intencao != assunto:
+            return None
+
+        entidades = extrair_entidades(mensagem, self.agora())
+        if assunto == "horario_localizacao":
+            # So a data muda; o "que horas abrem" vem do turno anterior.
+            if not entidades["data"]:
+                return None
+        elif assunto == "cardapio_alergenicos":
+            # Alergenico/restricao + pronome, sem prato: o prato e o ultimo.
+            tem_criterio = entidades["alergenicos"] or entidades["restricoes"]
+            sem_prato = not entidades["pratos"] and not entidades["pratos_ambiguos"]
+            if not (tem_criterio and sem_prato and _RE_PRONOME.search(texto) and estado.ultimo_prato):
+                return None
+            entidades["pratos"] = [estado.ultimo_prato]
+        else:
+            return None
+
+        estado.falhas_seguidas = 0
+        estado.esclarecimento = None
+        texto_resposta = self._responder_intencao(assunto, estado, mensagem, entidades=entidades)
+        return Resposta(texto_resposta, assunto, "aceita", decisao.confianca, herdou_contexto=True)
 
     # --- Regras prioritarias --------------------------------------------------
 
@@ -438,19 +556,198 @@ class GerenciadorDialogo:
         estado: EstadoConversa,
         mensagem: str = "",
         resolveu: list[str] | None = None,
+        entidades: dict | None = None,
     ) -> str:
         """Monta a resposta de uma intencao aceita.
 
         Ponto de extensao para respostas detalhadas por intencao. Hoje:
         - reserva: abre o fluxo de reserva (ou responde a politica, se a
           mensagem fala de cancelar/alterar/atrasar uma reserva existente);
-        - demais: respostas_fixas da base.
+        - horario_localizacao: com data, o horario daquele dia;
+        - cardapio_alergenicos: com prato, alergenico ou restricao, consulta
+          o cardapio da base;
+        - sem entidades uteis: respostas_fixas da base.
         `resolveu` traz as candidatas do esclarecimento que esta resposta
-        encerrou, se houver.
+        encerrou, se houver. `entidades` permite passar entidades ja
+        completadas pela heranca de contexto (senao, sao extraidas da mensagem).
         """
         if intencao == "reserva":
             return self._iniciar_reserva(mensagem, estado)
+        if entidades is None:
+            entidades = extrair_entidades(mensagem, self.agora()) if mensagem else None
+
+        if entidades and intencao == "horario_localizacao" and entidades["data"]:
+            estado.ultima_data = entidades["data"]
+            return self._horario_do_dia(date.fromisoformat(entidades["data"]))
+
+        if entidades and intencao == "cardapio_alergenicos":
+            texto = self._consultar_cardapio(mensagem, entidades, estado)
+            if texto is not None:
+                return texto
         return self._sortear(self.respostas_fixas[intencao])
+
+    # --- Consultas a base (horario e cardapio) --------------------------------
+    # Ficam aqui enquanto nao existe chatbot/conhecimento.py.
+
+    def _horario_do_dia(self, dia: date) -> str:
+        """Horario de funcionamento de um dia (ou que esta fechado)."""
+        info = self.funcionamento[_CHAVES_DIAS[dia.weekday()]]
+        no_dia = _no_dia(dia)
+        campos = {"No_dia": no_dia[0].upper() + no_dia[1:], "data": dia.strftime("%d/%m")}
+        if not info["aberto"]:
+            return MENSAGENS_CONSULTA["dia_fechado"].format(**campos)
+        turnos = " e ".join(
+            MENSAGENS_CONSULTA["turno"].format(
+                turno=_NOMES_TURNOS[turno], abre=info[turno]["abre"], fecha=info[turno]["fecha"]
+            )
+            for turno in _TURNOS if info.get(turno)
+        )
+        return MENSAGENS_CONSULTA["dia_aberto"].format(turnos=turnos, **campos)
+
+    def _consultar_cardapio(self, mensagem: str, entidades: dict, estado: EstadoConversa) -> str | None:
+        """Responde sobre o cardapio a partir das entidades; None se nao ha nenhuma util.
+
+        - prato + restricao: o prato atende a restricao?
+        - prato + alergenico: o prato contem o alergenico?
+        - so prato: descricao, preco e alergenicos do prato;
+        - so restricao: pratos compativeis;
+        - so alergenico: pratos sem ele (se o cliente quer evitar) ou com ele.
+        """
+        pratos = [p for p in entidades["pratos"] if p in self.pratos]
+        alergenicos = [a for a in entidades["alergenicos"] if a in self.alergenicos]
+        restricoes = [r for r in entidades["restricoes"] if r in _NOMES_RESTRICOES]
+        if restricoes:
+            # "tem prato vegano?" casa com o sinonimo "prato vegano" de um prato
+            # da base, mas e um pedido de lista: descarta o prato quando ele so
+            # foi reconhecido por um sinonimo que contem a propria restricao.
+            texto = preprocessar(mensagem)
+            pratos = [p for p in pratos if not self._citado_so_pela_restricao(p, restricoes, texto)]
+
+        if pratos:
+            # O pronome so aponta para um prato quando a resposta fala de um so.
+            estado.ultimo_prato = pratos[0] if len(pratos) == 1 else None
+            partes = []
+            for id_prato in pratos:
+                # Restricao antes de alergenico: em "o pudim e sem lactose?" o
+                # cliente pergunta pela restricao ("Nao, nao e sem lactose"),
+                # nao se o prato contem leite.
+                if restricoes:
+                    partes += [self._prato_atende(id_prato, r) for r in restricoes]
+                elif alergenicos:
+                    partes += [self._prato_contem(id_prato, a) for a in alergenicos]
+                else:
+                    partes.append(self._descrever_prato(id_prato))
+            return self._com_aviso(" ".join(partes), alergenicos)
+
+        if entidades["pratos_ambiguos"]:
+            nomes = []
+            for candidatos in entidades["pratos_ambiguos"].values():
+                nomes += [self.pratos[c]["nome"] for c in candidatos if c in self.pratos]
+            return MENSAGENS_CONSULTA["prato_ambiguo"].format(opcoes=_juntar(_unicos(nomes)))
+
+        if restricoes:
+            partes = [self._listar_restricao(r) for r in restricoes]
+            return self._com_aviso(" ".join(partes), [])
+
+        if alergenicos:
+            evitar = bool(_RE_EVITAR.search(preprocessar(mensagem)))
+            partes = [self._listar_por_alergenico(a, evitar) for a in alergenicos]
+            return self._com_aviso(" ".join(partes), alergenicos)
+        return None
+
+    def _citado_so_pela_restricao(self, id_prato: str, restricoes: list[str], texto: str) -> bool:
+        """Diz se o prato so aparece na mensagem por um sinonimo que contem a restricao.
+
+        "tem prato vegano" cita o prato pelo sinonimo "prato vegano" (pedido
+        de lista); "a moqueca de banana e vegana" cita por "moqueca de banana".
+        """
+        prato = self.pratos[id_prato]
+        raizes = [preprocessar(_NOMES_RESTRICOES[r])[:-1] for r in restricoes]  # "vegan", "sem glute"
+        citados = [
+            termo for termo in map(preprocessar, prato.get("sinonimos", []) + [prato["nome"]])
+            if termo and re.search(rf"\b{re.escape(termo)}\b", texto)
+        ]
+        return bool(citados) and all(any(r in termo for r in raizes) for termo in citados)
+
+    def _nome_alergenico(self, id_alergenico: str) -> str:
+        """'trigo_gluten' -> 'trigo / glúten'."""
+        return self.alergenicos[id_alergenico]["nome"].lower()
+
+    def _prato_contem(self, id_prato: str, id_alergenico: str) -> str:
+        """Diz se o prato contem, pode conter ou nao contem o alergenico."""
+        prato = self.pratos[id_prato]
+        campos = {"prato": prato["nome"], "Prato": prato["nome"],
+                  "alergenico": self._nome_alergenico(id_alergenico)}
+        if id_alergenico in prato["alergenicos"]:
+            return MENSAGENS_CONSULTA["contem"].format(**campos)
+        if id_alergenico in prato.get("pode_conter", []):
+            return MENSAGENS_CONSULTA["pode_conter"].format(**campos)
+        return MENSAGENS_CONSULTA["nao_contem"].format(**campos)
+
+    def _prato_atende(self, id_prato: str, restricao: str) -> str:
+        """Diz se o prato atende a restricao (campo booleano do prato na base)."""
+        prato = self.pratos[id_prato]
+        chave = "restricao_sim" if prato.get(restricao) else "restricao_nao"
+        return MENSAGENS_CONSULTA[chave].format(
+            prato=prato["nome"], restricao=_NOMES_RESTRICOES[restricao]
+        )
+
+    def _descrever_prato(self, id_prato: str) -> str:
+        """Descricao, porcao, preco e alergenicos de um prato."""
+        prato = self.pratos[id_prato]
+        partes = [MENSAGENS_CONSULTA["prato"].format(
+            nome=prato["nome"],
+            descricao=prato["descricao"],
+            serve=_plural(prato["serve_pessoas"], "pessoa", "pessoas"),
+            preco=f"R$ {prato['preco']:.2f}".replace(".", ","),
+        )]
+        if prato["alergenicos"]:
+            lista = _juntar([self._nome_alergenico(a) for a in prato["alergenicos"]])
+            partes.append(MENSAGENS_CONSULTA["prato_alergenicos"].format(lista=lista))
+        else:
+            partes.append(MENSAGENS_CONSULTA["prato_sem_alergenicos"])
+        if prato.get("pode_conter"):
+            lista = _juntar([self._nome_alergenico(a) for a in prato["pode_conter"]])
+            partes.append(MENSAGENS_CONSULTA["prato_pode_conter"].format(lista=lista))
+        return " ".join(partes)
+
+    def _listar_restricao(self, restricao: str) -> str:
+        """Pratos que atendem a restricao (vegano, sem gluten...)."""
+        nome = _NOMES_RESTRICOES[restricao]
+        pratos = [p["nome"] for p in self.pratos.values() if p.get(restricao)]
+        if not pratos:
+            return MENSAGENS_CONSULTA["lista_vazia"].format(criterio=nome)
+        return MENSAGENS_CONSULTA["lista_restricao"].format(
+            restricao=nome + ("s" if nome.endswith("a") else ""), pratos=_juntar(pratos)
+        )
+
+    def _listar_por_alergenico(self, id_alergenico: str, evitar: bool) -> str:
+        """Pratos sem o alergenico (evitar=True) ou que o levam (evitar=False).
+
+        Para quem quer evitar, "pode conter" tambem fica de fora, por seguranca.
+        """
+        nome = self._nome_alergenico(id_alergenico)
+        if evitar:
+            pratos = [
+                p["nome"] for p in self.pratos.values()
+                if id_alergenico not in p["alergenicos"]
+                and id_alergenico not in p.get("pode_conter", [])
+            ]
+            chave, criterio = "lista_sem_alergenico", f"sem {nome}"
+        else:
+            pratos = [p["nome"] for p in self.pratos.values() if id_alergenico in p["alergenicos"]]
+            chave, criterio = "lista_com_alergenico", f"com {nome}"
+        if not pratos:
+            return MENSAGENS_CONSULTA["lista_vazia"].format(criterio=criterio)
+        return MENSAGENS_CONSULTA[chave].format(alergenico=nome, pratos=_juntar(pratos))
+
+    def _com_aviso(self, texto: str, alergenicos: list[str]) -> str:
+        """Acrescenta as observacoes dos alergenicos citados e o aviso padrao da base."""
+        observacoes = [
+            self.alergenicos[a]["observacao"] for a in alergenicos
+            if self.alergenicos[a].get("observacao")
+        ]
+        return " ".join([texto, *observacoes, self.base["alergenicos"]["aviso_padrao"]])
 
     def _encaminhamento(self, indice: int) -> str:
         """Mensagem de encaminhamento humano da base."""
@@ -511,9 +808,11 @@ class GerenciadorDialogo:
 
         if decisao is None:
             decisao = self._ajustar_decisao(classificar(self.modelo, mensagem), mensagem)
-        return self._decisao_no_meio_da_reserva(decisao, estado)
+        return self._decisao_no_meio_da_reserva(decisao, estado, mensagem)
 
-    def _decisao_no_meio_da_reserva(self, decisao: Decisao, estado: EstadoConversa) -> Resposta:
+    def _decisao_no_meio_da_reserva(
+        self, decisao: Decisao, estado: EstadoConversa, mensagem: str
+    ) -> Resposta:
         """Responde o classificador sem perder os slots e lembra o passo pendente."""
         lembrete = self._lembrete(estado)
 
@@ -523,7 +822,7 @@ class GerenciadorDialogo:
                 # Continua falando da reserva: so repete o passo pendente.
                 return Resposta(self._pergunta(estado), "reserva", "reserva", decisao.confianca)
             estado.assunto_anterior = decisao.intencao
-            texto = self._responder_intencao(decisao.intencao, estado)
+            texto = self._responder_intencao(decisao.intencao, estado, mensagem)
             return Resposta(texto + "\n\n" + lembrete, decisao.intencao, "aceita", decisao.confianca)
 
         if decisao.tipo == "abstencao":

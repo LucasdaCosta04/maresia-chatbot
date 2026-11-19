@@ -374,7 +374,7 @@ def test_pergunta_de_cardapio_no_meio_da_reserva(reserva, estado):
     slots_antes = dict(estado.slots)
     r = reserva.responder("vocês têm prato sem glúten?", estado)
     assert r.intencao == "cardapio_alergenicos"
-    assert any(texto in r.texto for texto in RESPOSTAS["cardapio_alergenicos"])
+    assert r.texto.startswith("Opções sem glúten:")
     assert "Sobre a sua reserva: Qual horário" in r.texto
     assert estado.slots == slots_antes
     assert estado.etapa_reserva == "coletando"
@@ -434,5 +434,200 @@ def test_cancelar_reserva_existente_responde_a_politica(reserva, estado):
 
 def test_reiniciar_limpa_a_reserva():
     estado = EstadoConversa(slots={"pessoas": 2}, etapa_reserva="confirmando")
+    estado.reiniciar()
+    assert estado == EstadoConversa()
+
+
+# --- Respostas com entidades --------------------------------------------------
+# Usa o mesmo AGORA (quarta 18/11/2026): sabado = 21/11, domingo = 22/11,
+# segunda = 23/11. Lula a Dore leva moluscos, ovos e trigo/gluten na base.
+
+PRATOS = {prato["id"]: prato for prato in BASE["cardapio"]}
+AVISO_ALERGENICOS = BASE["alergenicos"]["aviso_padrao"]
+
+
+def test_horario_de_um_dia(reserva, estado):
+    r = reserva.responder("que horas vocês abrem no sábado?", estado)
+    assert r.intencao == "horario_localizacao"
+    assert r.herdou_contexto is False
+    sabado = BASE["funcionamento"]["dias"]["sabado"]
+    assert r.texto == (
+        f"No sábado (21/11) abrimos no almoço das {sabado['almoco']['abre']} às "
+        f"{sabado['almoco']['fecha']} e no jantar das {sabado['jantar']['abre']} às "
+        f"{sabado['jantar']['fecha']}."
+    )
+    assert estado.ultima_data == "2026-11-21"
+
+
+def test_horario_sem_data_mantem_resposta_fixa(reserva, estado):
+    r = reserva.responder("que horas vocês abrem?", estado)
+    assert r.texto in RESPOSTAS["horario_localizacao"]
+    assert estado.ultima_data is None
+
+
+def test_prato_contem_alergenico(reserva, estado):
+    r = reserva.responder("o bolinho de siri tem glúten?", estado)
+    assert r.intencao == "cardapio_alergenicos"
+    assert r.texto.startswith("Sim, Bolinho de Siri (12 unidades) contém trigo / glúten.")
+    assert AVISO_ALERGENICOS in r.texto
+    assert estado.ultimo_prato == "bolinho_siri"
+
+
+def test_prato_nao_contem_alergenico(reserva, estado):
+    r = reserva.responder("a moqueca de peixe tem lactose?", estado)
+    assert r.texto.startswith("Não, Moqueca de Peixe não contém leite e derivados.")
+
+
+def test_prato_pode_conter_alergenico(reserva, estado):
+    # Caldo de Peixe: crustaceos so em pode_conter.
+    assert "crustaceos" in PRATOS["caldo_peixe"]["pode_conter"]
+    r = reserva.responder("o caldo de peixe tem camarão?", estado)
+    assert "pode conter traços" in r.texto
+
+
+def test_so_prato_descreve_o_prato(reserva, estado):
+    r = reserva.responder("o que tem na lula à dorê?", estado)
+    lula = PRATOS["lula_a_dore"]
+    assert r.texto.startswith(f"{lula['nome']}: {lula['descricao']}")
+    assert "Alergênicos: moluscos, ovos e trigo / glúten." in r.texto
+    assert estado.ultimo_prato == "lula_a_dore"
+
+
+def test_lista_de_pratos_sem_gluten(reserva, estado):
+    r = reserva.responder("tem opção sem glúten?", estado)
+    sem_gluten = [p["nome"] for p in BASE["cardapio"] if p["sem_gluten"]]
+    com_gluten = [p["nome"] for p in BASE["cardapio"] if not p["sem_gluten"]]
+    assert r.texto.startswith("Opções sem glúten:")
+    assert all(nome in r.texto for nome in sem_gluten)
+    assert not any(nome in r.texto for nome in com_gluten)
+
+
+def test_lista_de_pratos_veganos_nao_vira_um_prato_so(reserva, estado):
+    r = reserva.responder("tem prato vegano?", estado)
+    assert r.texto.startswith("Opções veganas:")
+    assert "Manjar de Coco" in r.texto
+    assert "Moqueca de Banana-da-Terra com Palmito" in r.texto
+
+
+def test_prato_com_restricao(reserva, estado):
+    r = reserva.responder("o pudim é sem lactose?", estado)
+    assert r.texto.startswith("Não, Pudim de Leite não é uma opção sem lactose.")
+
+
+def test_alergenico_sem_pista_lista_pratos_com_ele(reserva, estado):
+    r = reserva.responder("tem camarão?", estado)
+    assert r.texto.startswith("Pratos que levam crustáceos:")
+
+
+def test_alergia_lista_pratos_sem_ele(reserva, estado):
+    r = reserva.responder("sou alérgico a camarão", estado)
+    assert r.texto.startswith("Pratos sem crustáceos:")
+    # "Pode conter" tambem fica de fora, por seguranca.
+    assert PRATOS["caldo_peixe"]["nome"] not in r.texto
+
+
+def test_prato_ambiguo_pergunta_qual(reserva, estado):
+    r = reserva.responder("tem moqueca?", estado)
+    assert "Moqueca de Peixe" in r.texto
+    assert "Moqueca de Banana-da-Terra com Palmito" in r.texto
+    assert r.texto.endswith("Sobre qual você quer saber?")
+
+
+# --- Heranca de contexto ------------------------------------------------------
+
+def test_herda_horario_para_outro_dia(reserva, estado):
+    reserva.responder("que horas vocês abrem no sábado?", estado)
+    r = reserva.responder("e no domingo?", estado)
+    assert r.herdou_contexto is True
+    assert r.intencao == "horario_localizacao"
+    domingo = BASE["funcionamento"]["dias"]["domingo"]
+    assert r.texto == (
+        f"No domingo (22/11) abrimos no almoço das {domingo['almoco']['abre']} às "
+        f"{domingo['almoco']['fecha']}."
+    )
+    assert estado.ultima_data == "2026-11-22"
+    assert estado.falhas_seguidas == 0
+
+
+def test_herda_horario_segunda_fechado(reserva, estado):
+    reserva.responder("que horas vocês abrem no sábado?", estado)
+    r = reserva.responder("e na segunda?", estado)
+    assert r.herdou_contexto is True
+    assert r.texto == "Na segunda-feira (23/11) o restaurante fica fechado."
+
+
+def test_herda_prato_com_pronome(reserva, estado):
+    reserva.responder("o que tem na lula à dorê?", estado)
+    r = reserva.responder("ele tem glúten?", estado)
+    assert r.herdou_contexto is True
+    assert r.intencao == "cardapio_alergenicos"
+    assert r.texto.startswith("Sim, Lula à Dorê contém trigo / glúten.")
+
+    r = reserva.responder("e esse tem lactose?", estado)
+    assert r.herdou_contexto is True
+    assert r.texto.startswith("Não, Lula à Dorê não contém leite e derivados.")
+
+
+def test_herda_zera_falhas(reserva, estado):
+    reserva.responder("que horas vocês abrem no sábado?", estado)
+    estado.falhas_seguidas = 1
+    reserva.responder("e no domingo?", estado)
+    assert estado.falhas_seguidas == 0
+
+
+def test_pronome_sem_prato_anterior_nao_herda(reserva, estado):
+    r = reserva.responder("ele tem glúten?", estado)
+    assert r.herdou_contexto is False
+    assert estado.ultimo_prato is None
+
+
+def test_pronome_depois_de_horario_nao_herda(reserva, estado):
+    # Assunto anterior e horario: alergenico nao e entidade util para ele.
+    reserva.responder("que horas vocês abrem no sábado?", estado)
+    r = reserva.responder("ele tem glúten?", estado)
+    assert r.herdou_contexto is False
+
+
+def test_outro_assunto_claro_nao_herda(reserva, estado):
+    reserva.responder("que horas vocês abrem no sábado?", estado)
+    r = reserva.responder("quero reservar uma mesa", estado)
+    assert r.herdou_contexto is False
+    assert r.intencao == "reserva"
+    assert estado.etapa_reserva == "coletando"
+
+
+def test_classificador_com_outra_intencao_impede_heranca(reserva, estado, monkeypatch):
+    reserva.responder("que horas vocês abrem no sábado?", estado)
+    monkeypatch.setattr(
+        dialogo, "classificar", lambda modelo, texto: _decisao("aceita", "cardapio_alergenicos")
+    )
+    r = reserva.responder("e no domingo?", estado)
+    assert r.herdou_contexto is False
+    assert r.intencao == "cardapio_alergenicos"
+
+
+def test_heranca_vence_fallback_e_esclarecimento(reserva, estado, monkeypatch):
+    reserva.responder("que horas vocês abrem no sábado?", estado)
+    for decisao in (_decisao("fallback"), _decisao("esclarecimento", "reserva", ["reserva", "horario_localizacao"])):
+        monkeypatch.setattr(dialogo, "classificar", lambda modelo, texto, d=decisao: d)
+        r = reserva.responder("e no domingo?", estado)
+        assert r.herdou_contexto is True
+        assert r.texto.startswith("No domingo (22/11)")
+
+
+def test_mensagem_longa_nao_herda(reserva, estado, monkeypatch):
+    reserva.responder("que horas vocês abrem no sábado?", estado)
+    monkeypatch.setattr(dialogo, "classificar", lambda modelo, texto: _decisao("fallback"))
+    r = reserva.responder("e se a gente for no domingo bem cedo mesmo?", estado)
+    assert r.herdou_contexto is False
+
+
+def test_so_data_sem_assunto_anterior_nao_herda(reserva, estado):
+    r = reserva.responder("e no domingo?", estado)
+    assert r.herdou_contexto is False
+
+
+def test_reiniciar_limpa_a_memoria():
+    estado = EstadoConversa(ultimo_prato="lula_a_dore", ultima_data="2026-11-21")
     estado.reiniciar()
     assert estado == EstadoConversa()
