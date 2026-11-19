@@ -46,3 +46,7 @@ MIN_SEGUNDA_ESCLARECIMENTO = 0.20
 INTENCAO_FORA_ESCOPO = "fora_escopo"
 # Numero de dobras da validacao cruzada estratificada.
 FOLDS_VALIDACAO = 5
+
+# --- API ---
+# Tamanho maximo (em caracteres) de uma mensagem recebida pela API.
+MAX_CARACTERES_MENSAGEM = 500

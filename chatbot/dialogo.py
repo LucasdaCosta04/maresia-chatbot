@@ -288,12 +288,32 @@ class Resposta:
     tipo: str
     confianca: float | None = None
     herdou_contexto: bool = False
+    # Probabilidades do classificador ({intencao: prob}); vazio quando a
+    # mensagem foi resolvida sem ele (regras, slots da reserva).
+    probabilidades: dict[str, float] = field(default_factory=dict)
 
 
 def carregar_base(caminho=CAMINHO_BASE) -> dict:
     """Le a base de conhecimento (JSON em UTF-8)."""
     with open(caminho, encoding="utf-8") as arquivo:
         return json.load(arquivo)
+
+
+def _campos_texto(base: dict) -> dict:
+    """Campos usados nos textos de ajuda e saudacao (restaurante e assuntos)."""
+    assuntos = list(NOMES_INTENCOES.values())
+    return {
+        "restaurante": base["restaurante"]["nome"],
+        "assunto_1": assuntos[0],
+        "assunto_2": assuntos[1],
+        "assunto_3": assuntos[2],
+    }
+
+
+def mensagem_boas_vindas(base: dict | None = None) -> str:
+    """Texto de boas-vindas: a mesma saudacao da regra prioritaria."""
+    base = base if base is not None else carregar_base()
+    return MENSAGENS_REGRAS["saudacao"].format(**_campos_texto(base))
 
 
 def _agora_real() -> datetime:
@@ -370,14 +390,7 @@ class GerenciadorDialogo:
         self.funcionamento = self.base["funcionamento"]["dias"]
         self.pratos = {prato["id"]: prato for prato in self.base["cardapio"]}
         self.alergenicos = self.base["alergenicos"]["itens"]
-        nome = self.base["restaurante"]["nome"]
-        assuntos = list(NOMES_INTENCOES.values())
-        self._campos_texto = {
-            "restaurante": nome,
-            "assunto_1": assuntos[0],
-            "assunto_2": assuntos[1],
-            "assunto_3": assuntos[2],
-        }
+        self._campos_texto = _campos_texto(self.base)
 
     # --- Entrada principal ----------------------------------------------------
 
@@ -391,9 +404,10 @@ class GerenciadorDialogo:
             return self._continuar_reserva(mensagem, texto, estado)
         decisao = self._ajustar_decisao(classificar(self.modelo, mensagem), mensagem)
         resposta = self._herdar_contexto(mensagem, texto, decisao, estado)
-        if resposta is not None:
-            return resposta
-        return self._tratar_decisao(decisao, estado, mensagem)
+        if resposta is None:
+            resposta = self._tratar_decisao(decisao, estado, mensagem)
+        resposta.probabilidades = decisao.probabilidades
+        return resposta
 
     # --- Heranca de contexto --------------------------------------------------
 
@@ -808,7 +822,9 @@ class GerenciadorDialogo:
 
         if decisao is None:
             decisao = self._ajustar_decisao(classificar(self.modelo, mensagem), mensagem)
-        return self._decisao_no_meio_da_reserva(decisao, estado, mensagem)
+        resposta = self._decisao_no_meio_da_reserva(decisao, estado, mensagem)
+        resposta.probabilidades = decisao.probabilidades
+        return resposta
 
     def _decisao_no_meio_da_reserva(
         self, decisao: Decisao, estado: EstadoConversa, mensagem: str
