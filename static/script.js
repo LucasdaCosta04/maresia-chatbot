@@ -135,6 +135,7 @@ const estado = {
   sessaoId: null,   // id devolvido pelo servidor (ou gerado aqui até lá)
   enviando: false,  // trava envios enquanto espera a resposta
   boasVindas: "",   // texto de /api/reiniciar, reaproveitado ao reiniciar
+  modelo: null,     // metadados do classificador (GET /api/saude ou /api/chat)
   sugestoesIniciais: [
     "Qual o horário de funcionamento?",
     "Quero reservar uma mesa",
@@ -471,6 +472,9 @@ async function iniciarConversa() {
     if (saude.status !== "ok") {
       throw new ErroApi("O servidor respondeu, mas ainda não está pronto.", { status: 503 });
     }
+    if (saude.modelo && typeof saude.modelo === "object") {
+      estado.modelo = { limiar: saude.limiar, margem_minima: saude.margem_minima, ...saude.modelo };
+    }
 
     // Sem sessão no corpo, o servidor cria uma nova e devolve o id.
     const inicio = await requisitarJson(API.reiniciar, { metodo: "POST", corpo: {} });
@@ -547,6 +551,9 @@ const NOMES_CONTEXTO = {
   encaminhado: "Encaminhado a atendente",
   herdou_contexto: "Herdou o contexto",
   data_solta: "Data pendente",
+  esclarecimento: "Aguardando escolha entre",
+  ultimo_prato: "Último prato citado",
+  ultima_data: "Última data citada",
 };
 
 // Valores internos que ficam melhores por extenso.
@@ -594,7 +601,8 @@ function formatarValor(valor, chave = "", grupo = {}) {
     return valor.map((item) => formatarValor(item, chave)).filter(Boolean).join(", ");
   }
   if (typeof valor === "object") {
-    if (typeof valor.nome === "string") return valor.nome;
+    // {id, nome} de um prato vira só o nome; slots da reserva mostram todos os campos
+    if (chave !== "slots" && typeof valor.nome === "string") return valor.nome;
     return Object.entries(valor)
       .map(([k, v]) => {
         const texto = formatarValor(v, k, valor);
@@ -603,14 +611,15 @@ function formatarValor(valor, chave = "", grupo = {}) {
       .filter(Boolean)
       .join(" · ");
   }
-  if (chave === "data" && /^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+  if ((chave === "data" || chave === "ultima_data") && /^\d{4}-\d{2}-\d{2}$/.test(valor)) {
     const [ano, mes, dia] = valor.split("-");
     const semana = grupo.dia_semana ? VALORES_LEGIVEIS[grupo.dia_semana] || grupo.dia_semana : "";
     return (semana ? semana + ", " : "") + dia + "/" + mes + "/" + ano;
   }
-  if (chave === "etapa_reserva" || chave === "assunto" || chave === "intencao_anterior") {
+  if (["etapa_reserva", "assunto", "intencao_anterior", "esclarecimento"].includes(chave)) {
     return ROTULOS_INTENCAO[valor] || VALORES_LEGIVEIS[valor] || nomeCampo(valor);
   }
+  if (chave === "ultimo_prato") return nomeCampo(valor);
   return VALORES_LEGIVEIS[valor] || String(valor);
 }
 
@@ -805,37 +814,73 @@ function renderizarAnalise(a) {
   el.etapas.hidden = false;
 }
 
+/** Primeiro valor que não é null/undefined/"" (ou undefined se nenhum). */
+function primeiro(...valores) {
+  return valores.find((v) => v !== null && v !== undefined && v !== "");
+}
+
+/** Objeto simples ou {} (descarta null, listas e outros tipos). */
+function objeto(valor) {
+  return valor && typeof valor === "object" && !Array.isArray(valor) ? valor : {};
+}
+
 /**
  * Monta a análise a partir da resposta de /api/chat e desenha o painel.
- * Usa dados.analise quando o servidor a envia; o que faltar vem dos
- * campos de nível superior (tipo, confiança, alternativas, contexto).
+ * Lê os campos de nível superior (texto_normalizado, entidades, limiar,
+ * probabilidades, contexto, modelo...) e aceita também dados.analise, de
+ * versões antigas. Campos nulos ou ausentes ficam de fora, sem "undefined".
  */
 function atualizarPainel(dados, mensagem) {
-  const extra = dados.analise && typeof dados.analise === "object" ? dados.analise : {};
+  const extra = objeto(dados.analise);
+  const probabilidades = primeiro(dados.probabilidades, extra.probabilidades);
   const analise = {
-    texto_original: mensagem,
-    intencao: dados.intencao,
-    tipo: dados.tipo,
-    confianca: dados.confianca,
-    margem: dados.margem,
-    alternativas: dados.alternativas,
-    camada: dados.herdou_contexto ? "contexto" : undefined,
-    ...extra,
+    texto_original: primeiro(dados.texto_original, extra.texto_original, mensagem),
+    texto_normalizado: primeiro(dados.texto_normalizado, extra.texto_normalizado),
+    tokens: primeiro(dados.tokens, extra.tokens),
+    intencao: primeiro(dados.intencao, extra.intencao),
+    tipo: primeiro(dados.tipo, dados.decisao, extra.tipo),
+    confianca: primeiro(dados.confianca, extra.confianca),
+    margem: primeiro(dados.margem, extra.margem),
+    limiar: primeiro(dados.limiar, extra.limiar),
+    margem_minima: primeiro(dados.margem_minima, extra.margem_minima),
+    // dict vazio = classificador não usado; nesse caso as alternativas também vêm vazias
+    probabilidades: Object.keys(objeto(probabilidades)).length ? probabilidades : undefined,
+    alternativas: primeiro(dados.alternativas, extra.alternativas),
+    entidades: dados.entidades || extra.entidades || null,
+    camada: dados.herdou_contexto ? "contexto" : extra.camada,
     contexto: {
       herdou_contexto: dados.herdou_contexto,
       falhas_seguidas: dados.falhas_seguidas,
-      encaminhado: dados.encaminhado,
-      ...(extra.contexto || {}),
+      encaminhado: primeiro(dados.encaminhado, dados.encaminhar_humano),
+      ...objeto(extra.contexto),
+      ...objeto(dados.contexto),
     },
   };
-  renderizarAnalise(analise);
+  if (dados.modelo && typeof dados.modelo === "object") estado.modelo = dados.modelo;
 
-  const limiar = typeof analise.limiar === "number" ? analise.limiar : LIMIAR_PADRAO;
-  const margem = typeof analise.margem_minima === "number" ? analise.margem_minima : MARGEM_PADRAO;
-  el.infoModelo.textContent =
-    "TF-IDF + regressão logística · limiar " + porcentagem(limiar) +
-    " · margem mínima " + porcentagem(margem) +
-    (estado.sessaoId ? " · sessão " + estado.sessaoId.slice(0, 8) : "");
+  renderizarAnalise(analise);
+  atualizarInfoModelo(analise.limiar, analise.margem_minima);
+}
+
+/** Rodapé do painel: tipo de modelo, limiar, margem mínima e sessão. */
+function atualizarInfoModelo(limiar, margemMinima) {
+  const modelo = objeto(estado.modelo);
+  const lim = typeof limiar === "number" ? limiar : typeof modelo.limiar === "number" ? modelo.limiar : LIMIAR_PADRAO;
+  const mar = typeof margemMinima === "number"
+    ? margemMinima
+    : typeof modelo.margem_minima === "number" ? modelo.margem_minima : MARGEM_PADRAO;
+  const partes = [
+    typeof modelo.tipo === "string" && modelo.tipo ? modelo.tipo : "TF-IDF + regressão logística",
+    "limiar " + porcentagem(lim),
+    "margem mínima " + porcentagem(mar),
+  ];
+  if (Array.isArray(modelo.intencoes) && modelo.intencoes.length) {
+    partes.push(modelo.intencoes.length + " intenções");
+  }
+  if (typeof estado.sessaoId === "string" && estado.sessaoId) {
+    partes.push("sessão " + estado.sessaoId.slice(0, 8));
+  }
+  el.infoModelo.textContent = partes.join(" · ");
 }
 
 /** Volta o painel ao estado inicial (antes da primeira mensagem). */
