@@ -57,7 +57,7 @@
 
   <div class="faixa-azulejos" aria-hidden="true"></div>
 
-  <main class="layout">
+  <main class="corpo">
     <section class="conversa" aria-label="Conversa com a Maresia">
       <ol id="mensagens" class="mensagens" aria-live="polite" aria-relevant="additions"></ol>
 
@@ -76,4 +76,53 @@
       </footer>
     </section>
 
-    <!-- continua: painel lateral (#painel), script e fechamento de </main>, </body> e </html> -->
+    <aside class="painel" id="painel" aria-labelledby="painel-titulo">
+      <div class="painel__cabecalho">
+        <h2 id="painel-titulo" class="painel__titulo">Como a Maresia entendeu</h2>
+        <button id="botao-fechar-painel" class="botao botao--icone" type="button"
+                aria-label="Fechar painel">
+          <span aria-hidden="true">×</span>
+        </button>
+      </div>
+
+      <p id="painel-vazio" class="painel__vazio">
+        Envie uma mensagem para ver, passo a passo, como ela foi interpretada.
+      </p>
+
+      <ol class="etapas" id="etapas" hidden>
+        <li class="etapa">
+          <h3 class="etapa__titulo">Pré-processamento</h3>
+          <p class="etapa__descricao">Texto normalizado e tokens usados pelo modelo.</p>
+          <div id="etapa-preprocessamento" class="etapa__conteudo"></div>
+        </li>
+        <li class="etapa">
+          <h3 class="etapa__titulo">Probabilidade por intenção</h3>
+          <p class="etapa__descricao">As intenções mais prováveis segundo o classificador.</p>
+          <div id="etapa-probabilidades" class="etapa__conteudo"></div>
+        </li>
+        <li class="etapa">
+          <h3 class="etapa__titulo">Entidades extraídas</h3>
+          <p class="etapa__descricao">Datas, horários, pratos e outras informações encontradas.</p>
+          <div id="etapa-entidades" class="etapa__conteudo"></div>
+        </li>
+        <li class="etapa">
+          <h3 class="etapa__titulo">Decisão</h3>
+          <p class="etapa__descricao">A intenção escolhida e por que a resposta foi essa.</p>
+          <div id="etapa-decisao" class="etapa__conteudo"></div>
+        </li>
+        <li class="etapa">
+          <h3 class="etapa__titulo">Contexto da conversa</h3>
+          <p class="etapa__descricao">O que a Maresia está lembrando desta conversa.</p>
+          <div id="etapa-contexto" class="etapa__conteudo"></div>
+        </li>
+      </ol>
+
+      <footer id="info-modelo" class="painel__info" aria-live="polite"></footer>
+    </aside>
+  </main>
+
+  <div class="veu" id="veu" hidden></div>
+
+  <script src="static/script.js"></script>
+</body>
+</html>
