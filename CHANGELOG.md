@@ -7,6 +7,51 @@ e o projeto adota o [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
 
+## [v1.1] - 2026-11-20
+
+Documentação e ferramentas de desenvolvimento. O comportamento do chatbot, da
+API e da interface não mudou.
+
+### Adicionado
+- `requirements-dev.txt` com as dependências de desenvolvimento: `pytest` e
+  `playwright`.
+- `docs/capturar_telas.py`: gera as capturas da interface com Playwright
+  (Chromium headless).
+  - Sobe um servidor Flask próprio com data fixa (18/11/2026 18:00) e
+    respostas com semente fixa, para gerar imagens reproduzíveis. Com
+    `--conectar`, usa um servidor que já esteja rodando (`--url` muda o
+    endereço).
+  - Confere, a cada captura, que a página não tem rolagem horizontal nem
+    vertical e que o painel não exibe `undefined` nem `NaN`.
+- Capturas de tela em `docs/`:
+  - `tela_contexto.png`: desktop, herança de contexto ("E no domingo?") com o
+    painel "Como a Maresia entendeu" aberto;
+  - `tela_dois_pedidos.png`: desktop, dois pedidos na mesma mensagem e o
+    pedido de esclarecimento;
+  - `tela_celular.png`: 390×844, conversa e gaveta do painel lado a lado.
+
+### Alterado
+- `README.md` reescrito de acordo com o código e a estrutura reais do
+  repositório:
+  - passo a passo para treinar (`python treinar.py`), rodar a API e a
+    interface (`python app.py`), rodar os testes (`python -m pytest -q`) e
+    capturar as telas (`python docs/capturar_telas.py`);
+  - fluxo do diálogo atualizado com regras prioritárias, reserva, pedidos
+    múltiplos, data solta, política de decisão e herança de contexto;
+  - exemplo real de `POST /api/chat` com os campos de explicabilidade, e
+    tabela das rotas;
+  - métricas reproduzíveis de `treinar.py`: acurácia de 0,830 ± 0,043 e
+    F1-macro de 0,827 na validação cruzada com 5 folds;
+  - desafio ao vivo corrigido: as frases vão em `dados/intencoes_treino.csv`
+    e as respostas em `dados/base_conhecimento.json`;
+  - tabela de parâmetros completa, limitações atualizadas e referências às
+    imagens de `docs/`.
+
+### Removido
+- Do `README.md`, as referências a arquivos e comandos que não existem no
+  repositório (`chatbot/conhecimento.py`, `terminal.py`, `avaliar.py`) e as
+  métricas de casos de teste que não podiam ser reproduzidas.
+
 ## [v1.0] - 2026-11-20
 
 Primeira versão da **Maresia**, assistente virtual do restaurante fictício
@@ -105,5 +150,6 @@ Primeira versão da **Maresia**, assistente virtual do restaurante fictício
 - README, guia de contribuição, modelos de pull request e de issue, licença
   MIT, `requirements.txt` e `.editorconfig`.
 
-[Não lançado]: https://github.com/LucasdaCosta04/maresia-chatbot/compare/v1.0...HEAD
+[Não lançado]: https://github.com/LucasdaCosta04/maresia-chatbot/compare/v1.1...HEAD
+[v1.1]: https://github.com/LucasdaCosta04/maresia-chatbot/compare/v1.0...v1.1
 [v1.0]: https://github.com/LucasdaCosta04/maresia-chatbot/releases/tag/v1.0

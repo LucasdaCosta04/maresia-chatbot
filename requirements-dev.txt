@@ -1,0 +1,9 @@
+# Dependências de desenvolvimento do Maresia Chatbot
+# Instale com: pip install -r requirements.txt -r requirements-dev.txt
+# Depois baixe o navegador do Playwright: python -m playwright install chromium
+
+# Execução dos testes automatizados
+pytest>=7
+
+# Capturas de tela da interface (docs/capturar_telas.py)
+playwright>=1.40
