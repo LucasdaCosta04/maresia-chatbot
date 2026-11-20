@@ -90,19 +90,19 @@ const NOMES_ENTIDADES = {
 // Ícones SVG em linha (herdam a cor do texto com currentColor).
 const ICONES = {
   enviar:
-    '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
+    '<svg class="icone" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
     '<path d="M3 11.5 20 4l-7.5 17-2.2-7.3L3 11.5Z" fill="none" stroke="currentColor" ' +
     'stroke-width="2" stroke-linejoin="round"/></svg>',
   reiniciar:
-    '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
+    '<svg class="icone" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
     '<path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4" fill="none" stroke="currentColor" ' +
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   painel:
-    '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
+    '<svg class="icone" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">' +
     '<path d="M4 19V11M10 19V5M16 19v-6M22 19H2" fill="none" stroke="currentColor" ' +
     'stroke-width="2" stroke-linecap="round"/></svg>',
   erro:
-    '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">' +
+    '<svg class="icone icone--pequeno" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">' +
     '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/>' +
     '<path d="M12 7v6M12 16.5v.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
@@ -369,16 +369,32 @@ function definirOcupado(ocupado) {
 /**
  * Ajusta as alturas:
  * - o textarea cresce com o texto (até o max-height do CSS);
- * - a aplicação acompanha a área visível (no celular o teclado virtual
- *   encolhe a tela sem mudar 100dvh), mantendo o formulário à vista.
+ * - a altura da aplicação fica só no CSS (100dvh). Não medimos a tela em JS:
+ *   visualViewport pode ser menor que a janela (zoom, teclado recém-fechado)
+ *   e deixava uma faixa em branco abaixo do rodapé.
  */
 function ajustarAltura() {
   el.campo.style.height = "auto";
   el.campo.style.height = el.campo.scrollHeight + 2 + "px";
-
-  const altura = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-  document.documentElement.style.setProperty("--altura-app", Math.round(altura) + "px");
+  manterJanelaNoTopo();
   rolarParaFim();
+}
+
+/**
+ * A janela nunca deve rolar (só .mensagens e .painel). O iOS desloca a
+ * página ao abrir o teclado mesmo com overflow: hidden; isto desfaz o deslocamento.
+ */
+function manterJanelaNoTopo() {
+  if (window.scrollX || window.scrollY) window.scrollTo(0, 0);
+}
+
+/** Foca sem deixar o navegador rolar contêineres para "mostrar" o elemento. */
+function focarSemRolar(elemento) {
+  try {
+    elemento.focus({ preventScroll: true });
+  } catch {
+    elemento.focus();
+  }
 }
 
 /* ---------- Conversa ---------- */
@@ -430,7 +446,7 @@ async function enviarMensagem(texto) {
     }
   } finally {
     definirOcupado(false);
-    el.campo.focus();
+    focarSemRolar(el.campo);
   }
 }
 
@@ -507,7 +523,7 @@ async function reiniciarConversa() {
     definirStatus(...statusDoErro(erro, "Erro ao reiniciar"));
   } finally {
     definirOcupado(false);
-    el.campo.focus();
+    focarSemRolar(el.campo);
   }
 }
 
@@ -842,8 +858,11 @@ function limparPainel() {
 
 const consultaGaveta = window.matchMedia("(max-width: 1080px)");
 
-/** abrir = true abre, false fecha. Cuida do véu, do aria-expanded e do foco. */
-function abrirPainel(abrir) {
+/**
+ * abrir = true abre, false fecha. Cuida do véu, do aria-expanded e do foco.
+ * focar = false não move o foco (usado na abertura automática, no carregamento).
+ */
+function abrirPainel(abrir, focar = true) {
   const aberto = el.painel.classList.contains("painel--aberto");
   if (abrir === aberto) return;
 
@@ -851,11 +870,17 @@ function abrirPainel(abrir) {
   el.veu.hidden = !abrir;
   el.botaoPainel.setAttribute("aria-expanded", String(abrir));
 
+  if (!focar) return;
   if (abrir) {
-    el.botaoFecharPainel.focus();
-  } else if (el.painel.contains(document.activeElement) && consultaGaveta.matches) {
-    el.botaoPainel.focus();
+    focarSemRolar(el.botaoFecharPainel);
+  } else if (el.painel.contains(document.activeElement)) {
+    focarSemRolar(el.botaoPainel);
   }
+}
+
+/** Desktop (> 1080px): painel aberto ao lado da conversa. Celular: gaveta fechada. */
+function abrirPainelConformeTela() {
+  abrirPainel(!consultaGaveta.matches, false);
 }
 
 /* ---------- Ouvintes de eventos ---------- */
@@ -876,11 +901,10 @@ el.campo.addEventListener("input", ajustarAltura);
 
 window.addEventListener("resize", ajustarAltura);
 if (window.visualViewport) window.visualViewport.addEventListener("resize", ajustarAltura);
+window.addEventListener("scroll", manterJanelaNoTopo, { passive: true });
 
-// Ao alargar a tela, a gaveta vira coluna fixa: fecha o véu.
-consultaGaveta.addEventListener("change", (evento) => {
-  if (!evento.matches) abrirPainel(false);
-});
+// Ao cruzar 1080px: no desktop o painel volta aberto; no celular a gaveta fecha.
+consultaGaveta.addEventListener("change", abrirPainelConformeTela);
 
 el.botaoReiniciar.addEventListener("click", reiniciarConversa);
 el.botaoPainel.addEventListener("click", () => {
@@ -901,5 +925,12 @@ window.addEventListener("online", () => {
 });
 
 /* ---------- Início ---------- */
+// Abre o painel no desktop sem animar o primeiro quadro (.sem-transicao).
+document.body.classList.add("sem-transicao");
+abrirPainelConformeTela();
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => document.body.classList.remove("sem-transicao"));
+});
+
 ajustarAltura();
 iniciarConversa();
