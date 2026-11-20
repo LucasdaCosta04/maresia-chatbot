@@ -1,6 +1,7 @@
 """Testes da API Flask (app.py)."""
 
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -17,6 +18,11 @@ CAMPOS_RESPOSTA = {
     "resposta", "intencao", "tipo", "confianca", "margem", "alternativas",
     "herdou_contexto", "encaminhado", "falhas_seguidas", "sessao",
     "decisao", "encaminhar_humano",
+}
+# Campos extras do painel "Como a Maresia entendeu" (retrocompativeis).
+CAMPOS_PAINEL = {
+    "texto_original", "texto_normalizado", "tokens", "entidades", "limiar",
+    "margem_minima", "probabilidades", "contexto", "modelo",
 }
 
 
@@ -44,7 +50,14 @@ def _enviar(cliente, mensagem, sessao=None, rota="/api/mensagem"):
 def test_saude(cliente):
     resposta = cliente.get("/api/saude")
     assert resposta.status_code == 200
-    assert resposta.get_json() == {"status": "ok", "modelo_carregado": True, "sessoes_ativas": 0}
+    dados = resposta.get_json()
+    assert {k: dados[k] for k in ("status", "modelo_carregado", "sessoes_ativas")} == {
+        "status": "ok", "modelo_carregado": True, "sessoes_ativas": 0,
+    }
+    assert dados["limiar"] == 0.45
+    assert dados["margem_minima"] == 0.15
+    assert dados["modelo"]["carregado"] is True
+    assert "reserva" in dados["modelo"]["intencoes"]
 
 
 def test_saude_conta_sessoes(cliente):
@@ -59,7 +72,7 @@ def test_mensagem_aceita(cliente):
     resposta = _enviar(cliente, "que horas vocês abrem no sábado?")
     assert resposta.status_code == 200
     dados = resposta.get_json()
-    assert set(dados) == CAMPOS_RESPOSTA
+    assert set(dados) == CAMPOS_RESPOSTA | CAMPOS_PAINEL
     assert dados["tipo"] == "aceita"
     assert dados["decisao"] == "aceita"
     assert dados["intencao"] == "horario_localizacao"
@@ -72,6 +85,22 @@ def test_mensagem_aceita(cliente):
     assert dados["encaminhado"] is False
     assert dados["encaminhar_humano"] is False
     assert dados["sessao"]
+
+
+def test_mensagem_campos_do_painel(cliente):
+    dados = _enviar(cliente, "Quero reservar mesa p/ 4 no sábado às 20h").get_json()
+    assert dados["texto_original"] == "Quero reservar mesa p/ 4 no sábado às 20h"
+    assert dados["texto_normalizado"] == "quero reservar mesa para num no sabado as num h"
+    assert dados["tokens"] == dados["texto_normalizado"].split()
+    assert dados["entidades"]["pessoas"] == 4
+    assert dados["entidades"]["data"] == "2026-11-21"
+    assert dados["entidades"]["horario"] == "20:00"
+    assert dados["limiar"] == 0.45 and dados["margem_minima"] == 0.15
+    probs = dados["probabilidades"]
+    assert max(probs, key=probs.get) == dados["alternativas"][0]["intencao"]
+    assert {"assunto", "etapa_reserva", "slots", "falhas_seguidas", "encaminhado",
+            "herdou_contexto"} <= set(dados["contexto"])
+    assert dados["modelo"]["tipo"]
 
 
 def test_alias_api_chat(cliente):
@@ -212,9 +241,56 @@ def test_405_em_json(cliente):
     assert "Método não permitido" in resposta.get_json()["erro"]
 
 
-def test_pagina_inicial_sem_interface(cliente):
+def test_pagina_inicial(cliente):
     resposta = cliente.get("/")
     assert resposta.status_code == 200
     texto = resposta.get_data(as_text=True)
-    assert "interface web ainda não foi criada" in texto
-    assert "POST /api/mensagem" in texto
+    if (Path(modulo_app.__file__).parent / "templates" / "index.html").exists():
+        assert "Como a Maresia entendeu" in texto
+        assert "/static/script.js" in texto
+    else:
+        assert "interface web ainda não foi criada" in texto
+        assert "POST /api/mensagem" in texto
+
+
+# --- Interface web ---------------------------------------------------------------
+
+def test_interface_html(cliente):
+    resposta = cliente.get("/")
+    assert resposta.status_code == 200
+    assert resposta.mimetype == "text/html"
+    texto = resposta.get_data(as_text=True)
+    assert "Tempero Açoriano" in texto
+    assert "Como a Maresia entendeu" in texto
+
+
+@pytest.mark.parametrize("arquivo", ["styles.css", "script.js"])
+def test_arquivos_estaticos(cliente, arquivo):
+    resposta = cliente.get(f"/static/{arquivo}")
+    try:
+        assert resposta.status_code == 200
+        assert resposta.get_data()  # nao vazio
+    finally:
+        resposta.close()
+
+
+def test_api_chat_chaves_originais_e_explicabilidade(cliente):
+    resposta = _enviar(cliente, "Quero reservar mesa p/ 4 no sábado às 20h", rota="/api/chat")
+    assert resposta.status_code == 200
+    dados = resposta.get_json()
+
+    # Retrocompatibilidade: todas as chaves originais continuam presentes.
+    assert CAMPOS_RESPOSTA <= set(dados)
+
+    campos_explicabilidade = {
+        "texto_original", "texto_normalizado", "entidades",
+        "limiar", "probabilidades", "contexto",
+    }
+    assert campos_explicabilidade <= set(dados)
+    assert dados["texto_original"] == "Quero reservar mesa p/ 4 no sábado às 20h"
+    assert isinstance(dados["texto_normalizado"], str) and dados["texto_normalizado"]
+    assert isinstance(dados["entidades"], dict)
+    assert isinstance(dados["limiar"], float)
+    assert isinstance(dados["probabilidades"], dict) and dados["probabilidades"]
+    assert abs(sum(dados["probabilidades"].values()) - 1) < 1e-3
+    assert isinstance(dados["contexto"], dict)
