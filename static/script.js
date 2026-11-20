@@ -367,11 +367,15 @@ function definirOcupado(ocupado) {
 }
 
 /**
- * Ajusta a altura da aplicação à área realmente visível. Em celulares o
- * teclado virtual encolhe a tela sem mudar 100dvh; com visualViewport o
- * formulário continua à vista enquanto o cliente digita.
+ * Ajusta as alturas:
+ * - o textarea cresce com o texto (até o max-height do CSS);
+ * - a aplicação acompanha a área visível (no celular o teclado virtual
+ *   encolhe a tela sem mudar 100dvh), mantendo o formulário à vista.
  */
 function ajustarAltura() {
+  el.campo.style.height = "auto";
+  el.campo.style.height = el.campo.scrollHeight + 2 + "px";
+
   const altura = window.visualViewport ? window.visualViewport.height : window.innerHeight;
   document.documentElement.style.setProperty("--altura-app", Math.round(altura) + "px");
   rolarParaFim();
@@ -390,6 +394,7 @@ async function enviarMensagem(texto) {
 
   adicionarMensagem(mensagem, "usuario");
   el.campo.value = "";
+  ajustarAltura();
   mostrarSugestoes([]);
   definirOcupado(true);
   definirStatus("Maresia está digitando…", "ocupado");
@@ -419,7 +424,10 @@ async function enviarMensagem(texto) {
     definirStatus(...statusDoErro(erro, "Erro ao responder"));
 
     // devolve o texto ao campo se o cliente ainda não começou outro
-    if (!el.campo.value) el.campo.value = mensagem;
+    if (!el.campo.value) {
+      el.campo.value = mensagem;
+      ajustarAltura();
+    }
   } finally {
     definirOcupado(false);
     el.campo.focus();
@@ -490,6 +498,7 @@ async function reiniciarConversa() {
     if (dados.resposta) estado.boasVindas = dados.resposta;
 
     el.campo.value = "";
+    ajustarAltura();
     mostrarBoasVindas();
     definirStatus("Online", "ok");
   } catch (erro) {
@@ -501,3 +510,396 @@ async function reiniciarConversa() {
     el.campo.focus();
   }
 }
+
+/* ---------- Painel "Como a Maresia entendeu" ---------- */
+
+// Valores de chatbot/config.py, usados quando a resposta não os traz.
+const LIMIAR_PADRAO = 0.45;
+const MARGEM_PADRAO = 0.15;
+
+// Chaves auxiliares de extrair_entidades(): já aparecem junto de outra
+// entidade (dia_semana vai com data) ou servem só ao diálogo.
+const CHAVES_AUXILIARES = new Set(["dia_semana", "pratos_ambiguos", "horario_ambiguo"]);
+
+// Nomes dos campos do estado da conversa (contexto).
+const NOMES_CONTEXTO = {
+  assunto: "Assunto atual",
+  intencao_anterior: "Assunto anterior",
+  etapa_reserva: "Etapa da reserva",
+  slots: "Dados da reserva",
+  falhas_seguidas: "Falhas seguidas",
+  encaminhado: "Encaminhado a atendente",
+  herdou_contexto: "Herdou o contexto",
+  data_solta: "Data pendente",
+};
+
+// Valores internos que ficam melhores por extenso.
+const VALORES_LEGIVEIS = {
+  sem_gluten: "sem glúten",
+  sem_lactose: "sem lactose",
+  vegetariano: "vegetariano",
+  vegano: "vegano",
+  almoco: "almoço",
+  jantar: "jantar",
+  segunda: "segunda-feira",
+  terca: "terça-feira",
+  quarta: "quarta-feira",
+  quinta: "quinta-feira",
+  sexta: "sexta-feira",
+  sabado: "sábado",
+  domingo: "domingo",
+};
+
+// Emblema quando a resposta veio do contexto herdado do turno anterior.
+const DECISAO_CONTEXTO = {
+  rotulo: "Usou o contexto",
+  tom: "verde",
+  descricao: "A mensagem completou o assunto do turno anterior, então a Maresia herdou a intenção.",
+};
+
+/** Nome legível de uma chave (entidade, contexto ou campo qualquer). */
+function nomeCampo(chave) {
+  if (NOMES_ENTIDADES[chave]) return NOMES_ENTIDADES[chave];
+  if (NOMES_CONTEXTO[chave]) return NOMES_CONTEXTO[chave];
+  const texto = String(chave).replace(/_/g, " ").trim();
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+/** "0.8234" → "82%" (ou "—" quando não há número). */
+function porcentagem(valor) {
+  return typeof valor === "number" && Number.isFinite(valor) ? Math.round(valor * 100) + "%" : "—";
+}
+
+/** Converte um valor de entidade/contexto em texto para o painel. */
+function formatarValor(valor, chave = "", grupo = {}) {
+  if (valor === null || valor === undefined || valor === "") return "";
+  if (typeof valor === "boolean") return valor ? "Sim" : "Não";
+  if (Array.isArray(valor)) {
+    return valor.map((item) => formatarValor(item, chave)).filter(Boolean).join(", ");
+  }
+  if (typeof valor === "object") {
+    if (typeof valor.nome === "string") return valor.nome;
+    return Object.entries(valor)
+      .map(([k, v]) => {
+        const texto = formatarValor(v, k, valor);
+        return texto ? nomeCampo(k) + ": " + texto : "";
+      })
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (chave === "data" && /^\d{4}-\d{2}-\d{2}$/.test(valor)) {
+    const [ano, mes, dia] = valor.split("-");
+    const semana = grupo.dia_semana ? VALORES_LEGIVEIS[grupo.dia_semana] || grupo.dia_semana : "";
+    return (semana ? semana + ", " : "") + dia + "/" + mes + "/" + ano;
+  }
+  if (chave === "etapa_reserva" || chave === "assunto" || chave === "intencao_anterior") {
+    return ROTULOS_INTENCAO[valor] || VALORES_LEGIVEIS[valor] || nomeCampo(valor);
+  }
+  return VALORES_LEGIVEIS[valor] || String(valor);
+}
+
+/**
+ * Preenche uma <ul class="entidades"> com itens {rotulo, valor}.
+ * valor pode ser texto ou um nó (ex.: <code>). Lista vazia vira um item
+ * .entidades--vazia com textoVazio. Devolve a própria lista.
+ */
+function preencherLista(lista, itens, textoVazio = "Nenhuma") {
+  lista.replaceChildren();
+  lista.classList.add("entidades");
+
+  if (!itens.length) {
+    const vazio = document.createElement("li");
+    vazio.className = "entidades--vazia";
+    vazio.textContent = textoVazio;
+    lista.appendChild(vazio);
+    return lista;
+  }
+
+  for (const { rotulo, valor } of itens) {
+    const item = document.createElement("li");
+    const tipo = document.createElement("span");
+    tipo.className = "entidades__tipo";
+    tipo.textContent = rotulo;
+    const conteudo = document.createElement("span");
+    conteudo.className = "entidades__valor";
+    if (valor instanceof Node) conteudo.appendChild(valor);
+    else conteudo.textContent = valor;
+    item.append(tipo, conteudo);
+    lista.appendChild(item);
+  }
+  return lista;
+}
+
+/** <code> com o texto (para mostrar frases sem formatação). */
+function codigo(texto) {
+  const elemento = document.createElement("code");
+  elemento.textContent = texto;
+  return elemento;
+}
+
+/** Parágrafo simples com uma classe opcional. */
+function paragrafo(texto, classe = "etapa__descricao") {
+  const p = document.createElement("p");
+  p.className = classe;
+  p.textContent = texto;
+  return p;
+}
+
+/** Lista [ [intencao, prob], ... ] em ordem decrescente, venha como dict ou lista. */
+function probabilidadesOrdenadas(a) {
+  let pares = [];
+  if (a.probabilidades && typeof a.probabilidades === "object" && !Array.isArray(a.probabilidades)) {
+    pares = Object.entries(a.probabilidades);
+  } else if (Array.isArray(a.alternativas)) {
+    pares = a.alternativas.map((alt) => [alt.intencao, alt.probabilidade]);
+  }
+  return pares
+    .filter(([intencao, prob]) => intencao && typeof prob === "number")
+    .sort((x, y) => y[1] - x[1]);
+}
+
+/** Uma barra de probabilidade com a linha tracejada do limiar. */
+function criarBarra(intencao, prob, limiar, escolhida) {
+  const barra = document.createElement("div");
+  barra.className = "barra" + (escolhida ? " barra--escolhida" : "");
+
+  const rotulo = document.createElement("span");
+  rotulo.className = "barra__rotulo";
+  rotulo.textContent = ROTULOS_INTENCAO[intencao] || nomeCampo(intencao);
+
+  const valor = document.createElement("span");
+  valor.className = "barra__valor";
+  valor.textContent = porcentagem(prob);
+
+  const trilho = document.createElement("div");
+  trilho.className = "barra__trilho";
+  trilho.style.setProperty("--limiar", Math.min(Math.max(limiar, 0), 1) * 100 + "%");
+  trilho.setAttribute("role", "img");
+  trilho.setAttribute(
+    "aria-label",
+    rotulo.textContent + ": " + valor.textContent + " (limiar " + porcentagem(limiar) + ")"
+  );
+
+  const preenchimento = document.createElement("div");
+  preenchimento.className = "barra__preenchimento";
+  preenchimento.style.width = Math.min(Math.max(prob, 0), 1) * 100 + "%";
+
+  const linha = document.createElement("div");
+  linha.className = "barra__limiar";
+  linha.title = "Limiar de confiança: " + porcentagem(limiar);
+
+  trilho.append(preenchimento, linha);
+  barra.append(rotulo, valor, trilho);
+  return barra;
+}
+
+/**
+ * Desenha as 5 etapas do painel a partir da análise de uma mensagem:
+ * {
+ *   texto_original, texto_normalizado, tokens?,
+ *   probabilidades {intencao: prob} | alternativas [{intencao, probabilidade}],
+ *   limiar?, margem?, intencao, tipo, confianca, camada?,
+ *   entidades {...}, contexto {...}
+ * }
+ * Campos ausentes viram um aviso curto na etapa, sem quebrar o painel.
+ */
+function renderizarAnalise(a) {
+  if (!a || typeof a !== "object") return;
+
+  // 1. Pré-processamento
+  const itensTexto = [];
+  if (a.texto_original) itensTexto.push({ rotulo: "Original", valor: codigo(a.texto_original) });
+  if (a.texto_normalizado) itensTexto.push({ rotulo: "Normalizado", valor: codigo(a.texto_normalizado) });
+  if (Array.isArray(a.tokens) && a.tokens.length) {
+    itensTexto.push({ rotulo: "Tokens", valor: codigo(a.tokens.join(" · ")) });
+  }
+  el.etapaPreprocessamento.replaceChildren(
+    preencherLista(document.createElement("ul"), itensTexto, "Texto não informado.")
+  );
+  if (a.texto_original && !a.texto_normalizado) {
+    el.etapaPreprocessamento.appendChild(paragrafo("O servidor não enviou o texto normalizado."));
+  }
+
+  // 2. Probabilidade por intenção
+  const limiar = typeof a.limiar === "number" ? a.limiar : LIMIAR_PADRAO;
+  const pares = probabilidadesOrdenadas(a);
+  el.etapaProbabilidades.replaceChildren();
+  if (pares.length) {
+    for (const [intencao, prob] of pares) {
+      el.etapaProbabilidades.appendChild(criarBarra(intencao, prob, limiar, intencao === a.intencao));
+    }
+    const legenda = "Linha tracejada: limiar de confiança (" + porcentagem(limiar) + ")" +
+      (typeof a.margem === "number" ? " · margem entre as duas primeiras: " + porcentagem(a.margem) : "");
+    el.etapaProbabilidades.appendChild(paragrafo(legenda));
+  } else {
+    el.etapaProbabilidades.appendChild(
+      paragrafo("O classificador não foi usado: a mensagem foi resolvida por " +
+        (CAMADAS[a.tipo] || "outra camada").toLowerCase() + ".")
+    );
+  }
+
+  // 3. Entidades extraídas (sem as chaves auxiliares e sem valores vazios)
+  const entidades = a.entidades && typeof a.entidades === "object" ? a.entidades : null;
+  el.etapaEntidades.replaceChildren();
+  if (entidades) {
+    const itens = Object.entries(entidades)
+      .filter(([chave]) => !CHAVES_AUXILIARES.has(chave) && !chave.startsWith("_"))
+      .map(([chave, valor]) => ({ rotulo: nomeCampo(chave), valor: formatarValor(valor, chave, entidades) }))
+      .filter((item) => item.valor);
+    el.etapaEntidades.appendChild(
+      preencherLista(document.createElement("ul"), itens, "Nenhuma entidade encontrada.")
+    );
+  } else {
+    el.etapaEntidades.appendChild(paragrafo("O servidor não enviou as entidades desta mensagem."));
+  }
+
+  // 4. Decisão
+  const usouContexto = a.camada === "contexto";
+  const decisao = usouContexto
+    ? DECISAO_CONTEXTO
+    : DECISOES[a.tipo] || { rotulo: a.tipo ? nomeCampo(a.tipo) : "Desconhecida", tom: "ardosia", descricao: "" };
+
+  const emblema = document.createElement("span");
+  emblema.className = "decisao";
+  emblema.dataset.tom = decisao.tom;
+  emblema.textContent = decisao.rotulo;
+
+  const itensDecisao = [
+    { rotulo: "Camada", valor: usouContexto ? "Contexto da conversa" : CAMADAS[a.tipo] || "—" },
+  ];
+  if (a.intencao) {
+    itensDecisao.push({ rotulo: "Intenção", valor: ROTULOS_INTENCAO[a.intencao] || nomeCampo(a.intencao) });
+  }
+  if (typeof a.confianca === "number") itensDecisao.push({ rotulo: "Confiança", valor: porcentagem(a.confianca) });
+
+  el.etapaDecisao.replaceChildren(emblema);
+  if (decisao.descricao) el.etapaDecisao.appendChild(paragrafo(decisao.descricao));
+  el.etapaDecisao.appendChild(preencherLista(document.createElement("ul"), itensDecisao));
+
+  // 5. Contexto da conversa
+  const contexto = a.contexto && typeof a.contexto === "object" ? a.contexto : {};
+  const itensContexto = Object.entries(contexto)
+    .map(([chave, valor]) => ({ rotulo: nomeCampo(chave), valor: formatarValor(valor, chave, contexto) }))
+    .filter((item) => item.valor);
+  el.etapaContexto.replaceChildren(
+    preencherLista(document.createElement("ul"), itensContexto, "Nada guardado ainda.")
+  );
+
+  el.painelVazio.hidden = true;
+  el.etapas.hidden = false;
+}
+
+/**
+ * Monta a análise a partir da resposta de /api/chat e desenha o painel.
+ * Usa dados.analise quando o servidor a envia; o que faltar vem dos
+ * campos de nível superior (tipo, confiança, alternativas, contexto).
+ */
+function atualizarPainel(dados, mensagem) {
+  const extra = dados.analise && typeof dados.analise === "object" ? dados.analise : {};
+  const analise = {
+    texto_original: mensagem,
+    intencao: dados.intencao,
+    tipo: dados.tipo,
+    confianca: dados.confianca,
+    margem: dados.margem,
+    alternativas: dados.alternativas,
+    camada: dados.herdou_contexto ? "contexto" : undefined,
+    ...extra,
+    contexto: {
+      herdou_contexto: dados.herdou_contexto,
+      falhas_seguidas: dados.falhas_seguidas,
+      encaminhado: dados.encaminhado,
+      ...(extra.contexto || {}),
+    },
+  };
+  renderizarAnalise(analise);
+
+  const limiar = typeof analise.limiar === "number" ? analise.limiar : LIMIAR_PADRAO;
+  const margem = typeof analise.margem_minima === "number" ? analise.margem_minima : MARGEM_PADRAO;
+  el.infoModelo.textContent =
+    "TF-IDF + regressão logística · limiar " + porcentagem(limiar) +
+    " · margem mínima " + porcentagem(margem) +
+    (estado.sessaoId ? " · sessão " + estado.sessaoId.slice(0, 8) : "");
+}
+
+/** Volta o painel ao estado inicial (antes da primeira mensagem). */
+function limparPainel() {
+  for (const caixa of [
+    el.etapaPreprocessamento,
+    el.etapaProbabilidades,
+    el.etapaEntidades,
+    el.etapaDecisao,
+    el.etapaContexto,
+  ]) {
+    caixa.replaceChildren();
+  }
+  el.etapas.hidden = true;
+  el.painelVazio.hidden = false;
+  el.infoModelo.textContent = "";
+}
+
+/* ---------- Abrir e fechar o painel (gaveta em telas até 1080px) ---------- */
+
+const consultaGaveta = window.matchMedia("(max-width: 1080px)");
+
+/** abrir = true abre, false fecha. Cuida do véu, do aria-expanded e do foco. */
+function abrirPainel(abrir) {
+  const aberto = el.painel.classList.contains("painel--aberto");
+  if (abrir === aberto) return;
+
+  el.painel.classList.toggle("painel--aberto", abrir);
+  el.veu.hidden = !abrir;
+  el.botaoPainel.setAttribute("aria-expanded", String(abrir));
+
+  if (abrir) {
+    el.botaoFecharPainel.focus();
+  } else if (el.painel.contains(document.activeElement) && consultaGaveta.matches) {
+    el.botaoPainel.focus();
+  }
+}
+
+/* ---------- Ouvintes de eventos ---------- */
+
+el.formulario.addEventListener("submit", (evento) => {
+  evento.preventDefault();
+  enviarMensagem(el.campo.value);
+});
+
+// Enter envia; Shift+Enter quebra a linha (comportamento padrão do textarea).
+el.campo.addEventListener("keydown", (evento) => {
+  if (evento.key !== "Enter" || evento.shiftKey || evento.isComposing) return;
+  evento.preventDefault();
+  if (!estado.enviando) el.formulario.requestSubmit();
+});
+
+el.campo.addEventListener("input", ajustarAltura);
+
+window.addEventListener("resize", ajustarAltura);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", ajustarAltura);
+
+// Ao alargar a tela, a gaveta vira coluna fixa: fecha o véu.
+consultaGaveta.addEventListener("change", (evento) => {
+  if (!evento.matches) abrirPainel(false);
+});
+
+el.botaoReiniciar.addEventListener("click", reiniciarConversa);
+el.botaoPainel.addEventListener("click", () => {
+  abrirPainel(!el.painel.classList.contains("painel--aberto"));
+});
+el.botaoFecharPainel.addEventListener("click", () => abrirPainel(false));
+el.veu.addEventListener("click", () => abrirPainel(false));
+
+document.addEventListener("keydown", (evento) => {
+  if (evento.key === "Escape" && el.painel.classList.contains("painel--aberto")) {
+    abrirPainel(false);
+  }
+});
+
+window.addEventListener("offline", () => definirStatus("Sem conexão", "offline"));
+window.addEventListener("online", () => {
+  if (!estado.enviando) definirStatus("Online", "ok");
+});
+
+/* ---------- Início ---------- */
+ajustarAltura();
+iniciarConversa();
