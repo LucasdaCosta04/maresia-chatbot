@@ -2,7 +2,8 @@
 
 Dataset de treino do classificador de intenções da **Maresia**, assistente virtual do restaurante
 fictício **Tempero Açoriano** (frutos do mar, Santo Antônio de Lisboa, Florianópolis/SC).
-Versão atual: **v1.0 — 236 frases, 59 por classe**.
+Versão atual: **v1.3 — 251 frases** (`cardapio_alergenicos` 59, `reserva` 69,
+`horario_localizacao` 64, `fora_escopo` 59).
 
 ## Origem
 
@@ -70,6 +71,33 @@ O script `scripts/checar_dataset.py` falha se algum desses temas aparecer no tre
 | lote 1 | 138 | 35 | 35 | 34 | 34 | Base inicial das quatro classes. |
 | lote 2 | 224 | 56 | 56 | 56 | 56 | +86 frases: alergênicos específicos (moluscos, gergelim, soja, ovo, amendoim), alteração e cancelamento de reserva, estacionamento e "como chegar", `fora_escopo` com palavras do domínio em outro sentido. |
 | lote 3 — **v1.0** | 236 | 59 | 59 | 59 | 59 | +12 frases (3 por classe) para cobrir casos de borda restantes. |
+| **v1.3** | 251 | 59 | 69 | 64 | 59 | +15 frases para corrigir lacunas de vocabulário apontadas pela avaliação cega (ver abaixo). |
+
+### Evolução v1.0 → v1.3
+
+**Motivo.** A avaliação cega da v1.1 (`resultados/matriz_testes.md`) mostrou duas lacunas de
+vocabulário no treino:
+
+1. **Reserva dita de forma coloquial.** O treino quase só tinha "reservar"/"reserva". Pedidos como
+   "marcar", "segurar", "guardar", "garantir" ou "deixar separada" uma mesa ou um lugar, e "janta" ou
+   "almoço" com a galera ou com a família, ficavam sem intenção definida. Foram acrescentadas
+   **10 frases de `reserva`** com esses verbos e situações, variando data, horário e número de pessoas.
+2. **Localização em mensagens muito curtas.** Mensagens de 1 a 3 palavras sobre endereço,
+   localização, mapa, onde fica ou como chegar caíam no fallback. Foram acrescentadas
+   **5 frases curtas de `horario_localizacao`**.
+
+**Regra para não contaminar a avaliação.** As frases novas são gerais e foram escritas sem abrir
+`casos_teste.csv`. Não copiam nem parafraseiam de perto nenhuma mensagem dos casos de teste. Por exemplo,
+"endereço" sozinho não entrou porque seria cópia exata de um caso. Uma frase candidata que ficou parecida
+demais com um caso foi reescrita antes de entrar. Nenhum caso de teste foi alterado. Nenhuma frase
+existente foi removida ou modificada. Os temas reservados continuam fora do treino.
+
+**Conferência.** `scripts/checar_dataset.py` sem erros. Em `scripts/checar_casos_teste.py`, a similaridade
+média dos casos com o treino passou de **0,362** para **0,364**. A máxima continua em **0,675** (T24),
+abaixo do limite de 0,85. Os casos que mais subiram foram T10 (0,230 → 0,271) e T13 (0,327 → 0,365).
+
+**Efeito colateral.** As classes deixaram de ser balanceadas (69 e 64 contra 59). A diferença é pequena,
+mas deve ser lembrada ao interpretar a matriz de confusão.
 
 ## Casos de teste (`casos_teste.csv`)
 
