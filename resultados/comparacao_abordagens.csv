@@ -1,0 +1,5 @@
+abordagem,acuracia_media,acuracia_desvio,f1_macro_media,f1_macro_desvio
+TF-IDF palavras + LR,0.8262,0.0162,0.8225,0.0192
+TF-IDF caracteres + LR,0.8134,0.0581,0.8074,0.0635
+TF-IDF palavras + caracteres + LR (atual),0.8304,0.0429,0.8267,0.0482
+TF-IDF palavras + MultinomialNB (linha de base),0.7839,0.0342,0.7757,0.0366
