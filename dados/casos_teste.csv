@@ -1,0 +1,35 @@
+id,categoria,contexto,mensagem,tipo_esperado,intencao_esperada,resposta_deve_conter,justificativa
+T01,esperada,,A caldeirada açoriana tem camarão?,aceita,cardapio_alergenicos,crustaceos,"Pergunta direta sobre alergênico de um prato da base, que lista crustáceos na caldeirada."
+T02,esperada,,Vocês têm algum prato vegano no cardápio?,aceita,cardapio_alergenicos,moqueca de banana,A base marca como vegana a Moqueca de Banana-da-Terra com Palmito (o manjar é sobremesa).
+T03,esperada,,Gostaria de reservar uma mesa para 3 pessoas na sexta às 20h,aceita|reserva,reserva,nome,"Sexta 20/11 às 20h está na janela do jantar e só falta o nome; o README não fixa se o 1º turno do fluxo vem como aceita ou como passo de reserva."
+T04,esperada,,Quero fazer uma reserva,aceita|reserva,reserva,pessoas,"Pedido de reserva sem dados: a Maresia deve pedir dia, horário e número de pessoas; aceita ou reserva valem pelo mesmo motivo do T03."
+T05,esperada,,Até que horas vocês ficam abertos na sexta?,aceita,horario_localizacao,23:30,Na base o jantar de sexta vai até 23:30.
+T06,esperada,,Qual é o endereço do restaurante?,aceita,horario_localizacao,rendeiras,O endereço da base é Rua das Rendeiras Açorianas 120.
+T07,reformulacao,,tem algum rango sem lactose ai pra mim?,aceita,cardapio_alergenicos,lactose,Gíria para pedir pratos sem lactose; é restrição alimentar e a resposta deve tratar de lactose.
+T08,reformulacao,,minha namorada é celíaca... rola ela comer alguma coisa aí?,aceita,cardapio_alergenicos,gluten,Celíaca equivale a restrição a glúten (sinônimo de trigo_gluten na base) dito de forma indireta.
+T09,reformulacao,,segura uma mesa pra gente amanhã de noite? somos em 4,aceita|reserva,reserva,horario,"Pedido coloquial de reserva com pessoas e data (quinta 19/11) mas sem horário exato, que é o que falta perguntar; aceita ou reserva como no T03."
+T10,reformulacao,,bora marcar uma janta aí no sábado com a galera,aceita|reserva,reserva,,"Gíria para reserva no sábado 21/11 sem pessoas nem horário; aceita ou reserva como no T03."
+T11,reformulacao,,vcs tão funcionando agora?,aceita,horario_localizacao,18:30,"Agora é quarta às 18:00, entre o almoço e o jantar; a resposta certa é que o jantar abre às 18:30."
+T12,reformulacao,,saindo do aeroporto de carro qual caminho eu faço pra chegar aí?,aceita,horario_localizacao,santo antonio,Como chegar de carro é horario_localizacao e a base descreve a rota até Santo Antônio de Lisboa.
+T13,ambigua,,quero dar uma olhada no cardápio e já deixar uma mesa garantida pra sexta,esclarecimento,,,"Dois pedidos (cardápio e reserva) na mesma mensagem: a Maresia deve perguntar por qual começar."
+T14,ambigua,,tem estacionamento? o polvo grelhado é sem glúten?,esclarecimento,,,"Mistura horario_localizacao (estacionamento) e cardapio_alergenicos (glúten), então deve pedir esclarecimento."
+T15,ambigua,,sexta-feira,esclarecimento,,horario,"Data solta: o README manda perguntar se a pessoa quer reservar ou saber o horário daquele dia."
+T16,ambigua,,queria saber sobre o jantar de sábado,esclarecimento,,,"Vago: pode ser horário do jantar, reserva ou cardápio do jantar, então a Maresia não deve chutar."
+T17,fora_escopo,,vai chover em Floripa nesse fim de semana?,abstencao,fora_escopo,,Previsão do tempo não tem relação com o restaurante.
+T18,fora_escopo,,vocês fazem delivery pro Campeche?,abstencao|fallback,fora_escopo,,"A base não tem nada sobre delivery; recusar ou dizer que não entendeu são aceitáveis, mas responder com cardápio ou reserva seria inventar."
+T19,fora_escopo,,a conta pode ser acertada via pix?,abstencao|fallback,fora_escopo,,"Pagamento não está na base (reservado para o desafio ao vivo), então a Maresia não deve inventar resposta: recusa ou fallback."
+T20,fora_escopo,,qual time de futebol tá liderando o brasileirão?,abstencao,fora_escopo,,Futebol é assunto sem relação com o restaurante.
+T21,fora_escopo,,me passa uma receita de bolo de cenoura com cobertura,abstencao,fora_escopo,,Pedir receita para fazer em casa não é pergunta sobre o cardápio do restaurante.
+T22,fora_escopo,,qual linha de ônibus vai do TICEN até a UFSC?,abstencao,fora_escopo,,Trajeto de ônibus entre dois pontos da cidade não envolve chegar ao restaurante.
+T23,limite,,qanto qusta a sequemcia de camarao conpleta,aceita,cardapio_alergenicos,,Erros de digitação pesados num pedido de preço; os n-gramas de caracteres devem tolerar as trocas de letras.
+T24,limite,,QUE HORAS VOCÊS FECHAM NO DOMINGO???,aceita,horario_localizacao,16:00,"Tudo em maiúsculas; no domingo só há almoço, que fecha às 16:00."
+T25,limite,,endereço,aceita,horario_localizacao,rendeiras,Uma palavra só mas inequívoca: pedido de endereço.
+T26,limite,,"Oi, tudo bem? Semana que vem é aniversário do meu filho de 8 anos, ele adora coco e a gente estava pensando em levar ele pra comer uma sobremesa diferente depois da escola. Só que ele tem alergia séria a amendoim, já foi parar no hospital uma vez por causa disso, então eu fico bem preocupada com qualquer doce. Vocês poderiam me dizer se a cocada de forno tem amendoim?",aceita,cardapio_alergenicos,amendoim,"Mensagem longa com um único pedido: a base diz que a cocada não leva amendoim, mas pode conter por contaminação cruzada."
+T27,limite,,mano tô morrendo de fome 😋🦐 qual o prato mais top de camarão de vcs?,aceita,cardapio_alergenicos,camarao,Emoji e gíria em volta de um pedido de sugestão de prato com camarão.
+T28,contexto,que horas vocês abrem na quinta?,e na segunda?,aceita,horario_localizacao,fechad,"Herda o assunto horário do turno anterior; na segunda o restaurante está fechado."
+T29,contexto,a moqueca de peixe tem lactose?,e o pudim?,aceita,cardapio_alergenicos,leite,Herda a pergunta sobre lactose e o pudim de leite leva leite.
+T30,contexto,quero reservar uma mesa,pra 5 pessoas no sábado às 13h,reserva,reserva,nome,"Continua o fluxo de reserva: sábado 21/11 às 13h está na janela do almoço, então falta o nome."
+T31,regra_negocio,,quero reservar pra 4 pessoas na segunda que vem às 20h,aceita|reserva,reserva,fechad,"Segunda 23/11 o restaurante está fechado e a reserva deve ser recusada; aceita ou reserva como no T03."
+T32,regra_negocio,,preciso de mesa pra 14 pessoas no sábado às 20h,reserva|encaminhamento,reserva,10 pessoas,"Acima de 10 pessoas a base manda a reserva para a equipe e cita o limite; o tipo pode ser passo de reserva ou encaminhamento."
+T33,encaminhamento,,quero falar com uma pessoa de verdade,encaminhamento|regra,,whatsapp,"Pedido explícito de atendente é regra prioritária que encaminha para a equipe; o README a trata como regra e como encaminhamento."
+T34,encaminhamento,xkq zzpt lom || blé fjfj ruuu,asdf qwer tyu,encaminhamento,,whatsapp,"Terceira mensagem sem sentido seguida: com 2 falhas já acumuladas, a Maresia deve encaminhar para um atendente."
