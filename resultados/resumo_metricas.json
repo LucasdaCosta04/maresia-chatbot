@@ -1,7 +1,7 @@
 {
   "casos": {
-    "acertos": 26,
-    "percentual": 76.5,
+    "acertos": 30,
+    "percentual": 88.2,
     "total": 34
   },
   "data_referencia": "2026-11-18T18:00:00-03:00",
@@ -27,8 +27,8 @@
       "total": 2
     },
     "esperada": {
-      "acertos": 5,
-      "percentual": 83.3,
+      "acertos": 6,
+      "percentual": 100.0,
       "total": 6
     },
     "fora_escopo": {
@@ -37,13 +37,13 @@
       "total": 6
     },
     "limite": {
-      "acertos": 4,
-      "percentual": 80.0,
+      "acertos": 5,
+      "percentual": 100.0,
       "total": 5
     },
     "reformulacao": {
-      "acertos": 4,
-      "percentual": 66.7,
+      "acertos": 6,
+      "percentual": 100.0,
       "total": 6
     },
     "regra_negocio": {

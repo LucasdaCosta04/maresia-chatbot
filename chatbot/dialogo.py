@@ -725,6 +725,14 @@ class GerenciadorDialogo:
             estado.ultima_data = entidades["data"]
             return self._horario_do_dia(date.fromisoformat(entidades["data"]))
 
+        if intencao == "horario_localizacao" and mensagem:
+            # Import local: chatbot.conhecimento importa deste modulo.
+            from chatbot.conhecimento import responder_horario_localizacao
+
+            texto = responder_horario_localizacao(mensagem, self.base, self.agora())
+            if texto is not None:
+                return texto
+
         if entidades and intencao == "cardapio_alergenicos":
             texto = self._consultar_cardapio(mensagem, entidades, estado)
             if texto is not None:
