@@ -1,0 +1,63 @@
+{
+  "casos": {
+    "acertos": 24,
+    "percentual": 70.6,
+    "total": 34
+  },
+  "data_referencia": "2026-11-18T18:00:00-03:00",
+  "dataset": {
+    "arquivo": "intencoes_treino.csv",
+    "n_frases": 236
+  },
+  "limiar_confianca": 0.45,
+  "por_categoria": {
+    "ambigua": {
+      "acertos": 3,
+      "percentual": 75.0,
+      "total": 4
+    },
+    "contexto": {
+      "acertos": 3,
+      "percentual": 100.0,
+      "total": 3
+    },
+    "encaminhamento": {
+      "acertos": 1,
+      "percentual": 50.0,
+      "total": 2
+    },
+    "esperada": {
+      "acertos": 5,
+      "percentual": 83.3,
+      "total": 6
+    },
+    "fora_escopo": {
+      "acertos": 4,
+      "percentual": 66.7,
+      "total": 6
+    },
+    "limite": {
+      "acertos": 4,
+      "percentual": 80.0,
+      "total": 5
+    },
+    "reformulacao": {
+      "acertos": 3,
+      "percentual": 50.0,
+      "total": 6
+    },
+    "regra_negocio": {
+      "acertos": 1,
+      "percentual": 50.0,
+      "total": 2
+    }
+  },
+  "validacao_cruzada": {
+    "acuracia_desvio": 0.0429,
+    "acuracia_media": 0.8304,
+    "f1_macro_desvio": 0.0482,
+    "f1_macro_media": 0.8267,
+    "folds": 5,
+    "semente": 42
+  }
+}

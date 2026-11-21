@@ -1,0 +1,35 @@
+id,mensagem,frase_treino_mais_parecida,similaridade,acima_do_limite
+T01,A caldeirada açoriana tem camarão?,A caldeirada açoriana leva mexilhão?,0.6424,nao
+T02,Vocês têm algum prato vegano no cardápio?,Tem opção vegetariana no cardápio?,0.3510,nao
+T03,Gostaria de reservar uma mesa para 3 pessoas na sexta às 20h,reserva pra 2 pessoas sexta as 20 30,0.4162,nao
+T04,Quero fazer uma reserva,quero fazer reserva de pousada em bombinhas,0.4332,nao
+T05,Até que horas vocês ficam abertos na sexta?,Vocês ficam abertos até tarde na sexta?,0.6482,nao
+T06,Qual é o endereço do restaurante?,qual o endereço de vcs,0.5619,nao
+T07,tem algum rango sem lactose ai pra mim?,tem sobremesa sem lactose,0.3823,nao
+T08,minha namorada é celíaca... rola ela comer alguma coisa aí?,"sou celíaca, o pirão de vocês tem farinha de trigo?",0.1718,nao
+T09,segura uma mesa pra gente amanhã de noite? somos em 4,"Gostaria de fazer uma reserva para amanhã à noite, somos 6 pessoas.",0.3598,nao
+T10,bora marcar uma janta aí no sábado com a galera,quero reservar uma mesa pra sábado,0.2299,nao
+T11,vcs tão funcionando agora?,como funcionava o horário de verão,0.2814,nao
+T12,saindo do aeroporto de carro qual caminho eu faço pra chegar aí?,quanto tempo leva do aeroporto até aí de carro,0.3838,nao
+T13,quero dar uma olhada no cardápio e já deixar uma mesa garantida pra sexta,quero reservar uma mesa pra sábado,0.3274,nao
+T14,tem estacionamento? o polvo grelhado é sem glúten?,tem estacionamento?,0.5349,nao
+T15,sexta-feira,queria agendar um jantar pra quinta feira,0.2923,nao
+T16,queria saber sobre o jantar de sábado,fecham entre o almoço e o jantar?,0.2559,nao
+T17,vai chover em Floripa nesse fim de semana?,o estacionamento lota no fim de semana?,0.2665,nao
+T18,vocês fazem delivery pro Campeche?,Vocês ficam abertos até tarde na sexta?,0.1093,nao
+T19,a conta pode ser acertada via pix?,a reserva no meu nome pode ser adiada pras 21h?,0.2463,nao
+T20,qual time de futebol tá liderando o brasileirão?,quem descobriu o brasil,0.2145,nao
+T21,me passa uma receita de bolo de cenoura com cobertura,me passa a localização,0.1839,nao
+T22,qual linha de ônibus vai do TICEN até a UFSC?,qual a distância da terra até a lua,0.1311,nao
+T23,qanto qusta a sequemcia de camarao conpleta,Quanto custa a sequência de camarão pra duas pessoas?,0.4311,nao
+T24,QUE HORAS VOCÊS FECHAM NO DOMINGO???,que horas vcs fecham domingo,0.6750,nao
+T25,endereço,qual o endereço de vcs,0.5773,nao
+T26,"Oi, tudo bem? Semana que vem é aniversário do meu filho de 8 anos, ele adora coco e a gente estava pensando em levar ele pra comer uma sobremesa diferente depois da escola. Só que ele tem alergia séria a amendoim, já foi parar no hospital uma vez por causa disso, então eu fico bem preocupada com qualquer doce. Vocês poderiam me dizer se a cocada de forno tem amendoim?","meu filho é alérgico a amendoim, a cocada leva amendoim?",0.3607,nao
+T27,mano tô morrendo de fome 😋🦐 qual o prato mais top de camarão de vcs?,qual o prato mais pedido da casa,0.3344,nao
+T28,e na segunda?,vcs funcionam de segunda a segunda?,0.6154,nao
+T29,e o pudim?,o pudim da casa é feito com ovo?,0.3701,nao
+T30,pra 5 pessoas no sábado às 13h,reservar mesa pra 4 no sábado às 13h,0.5324,nao
+T31,quero reservar pra 4 pessoas na segunda que vem às 20h,vcs funcionam de segunda a segunda?,0.3073,nao
+T32,preciso de mesa pra 14 pessoas no sábado às 20h,reservar mesa pra 4 no sábado às 13h,0.4057,nao
+T33,quero falar com uma pessoa de verdade,dá pra reservar com uma hora de antecedência?,0.2389,nao
+T34,asdf qwer tyu,quem é o melhor tenista do mundo,0.0224,nao
