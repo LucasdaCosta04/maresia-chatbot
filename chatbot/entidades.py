@@ -41,9 +41,40 @@ _RESTRICOES = {
                    r"|\bintoleran\w*\s+(?:a\s+)?lactose\b",
 }
 
+# Categorias do cardapio: ids iguais ao campo "categoria" dos pratos na base.
+_CATEGORIAS = {
+    "entrada": r"\bentradas?\b|\bpetiscos?\b|\baperitivos?\b",
+    "prato_principal": r"\bpratos?\s+principa(?:l|is)\b|\bprincipais\b",
+    "acompanhamento": r"\bacompanhamentos?\b",
+    "salada": r"\bsaladas?\b",
+    "sobremesa": r"\bsobremesas?\b|\bdoces?\b",
+}
+
+# Preco: so vale com contexto de dinheiro na mensagem, para "ate 10 pessoas"
+# ou "ate as 20h" nao virarem faixa de preco.
+_RE_CONTEXTO_PRECO = re.compile(
+    r"r\$|\b(?:reais|real|contos?|pila|prec\w*|cust\w*|valor\w*|gastar|orcamento"
+    r"|barat\w*|car[oa]s?)\b"
+)
+_NUM_PRECO = r"(?:r\$\s*)?(\d{1,4}(?:[.,]\d{1,2})?)"
+_RE_PRECO_ENTRE = re.compile(
+    r"\bentre\s+" + _NUM_PRECO + r"(?:\s*(?:reais|real))?\s+e\s+" + _NUM_PRECO
+)
+_RE_PRECO_MAX = re.compile(
+    r"\b(?:ate|abaixo de|menos de|no maximo|inferior a|nao passe de|max)\s+" + _NUM_PRECO
+)
+_RE_PRECO_MIN = re.compile(
+    r"\b(?:acima de|mais de|a partir de|pelo menos|superior a|minimo de)\s+" + _NUM_PRECO
+)
+_RE_MAIS_CARO = re.compile(r"\b(?:mais\s+car[oa]s?|maior(?:es)?\s+prec\w*)\b")
+_RE_MAIS_BARATO = re.compile(
+    r"\b(?:mais\s+(?:barat[oa]s?|em conta|economic[oa]s?)|menor(?:es)?\s+prec\w*|barat\w*)\b"
+)
+
 # Pista de alergia logo antes do termo: o termo vale como alergenico, nao prato.
 _RE_PISTA_ALERGIA = re.compile(
-    r"(?:alergi\w*|alergic\w*|intoleran\w*|sem|nao\s+(?:como|posso\s+comer))"
+    r"(?:alergi\w*|alergic\w*|intoleran\w*|sem|livres?\s+de|nao\s+(?:como|posso\s+comer"
+    r"|tem|tenham?|levam?|leve|contem|contenham?|possuem?|vem\s+com))"
     r"\s+(?:(?:a|ao|aos|as|de|do|da|com)\s+)?$"
 )
 
@@ -167,13 +198,21 @@ def _indice_pratos() -> list:
 
 @lru_cache(maxsize=1)
 def _indice_alergenicos() -> list:
-    """Lista (sinonimo, regex, id) do sinonimo mais longo ao mais curto."""
-    itens = _carregar_base()["alergenicos"]["itens"]
+    """Lista (sinonimo, regex, valor) do sinonimo mais longo ao mais curto.
+
+    O valor e o id do alergenico, ou ("grupo", termo) para as variacoes de
+    alergenicos.termos_ambiguos da base ("frutos do mar").
+    """
+    secao = _carregar_base()["alergenicos"]
     indice = {}
-    for item in itens.values():
+    for item in secao["itens"].values():
         for sinonimo in item["sinonimos"] + [item["id"].replace("_", " ")]:
             termo = " ".join(_normalizar(sinonimo).split())
             indice.setdefault(termo, item["id"])
+    for grupo in secao.get("termos_ambiguos", []):
+        for variacao in grupo["variacoes"] + [grupo["termo"]]:
+            termo = " ".join(_normalizar(variacao).split())
+            indice.setdefault(termo, ("grupo", grupo["termo"]))
     return sorted(
         ((t, _regex_termo(t), i) for t, i in indice.items()),
         key=lambda item: len(item[0]), reverse=True,
@@ -200,8 +239,21 @@ def _unicos(valores) -> list:
     return list(dict.fromkeys(valores))
 
 
+@lru_cache(maxsize=1)
+def _ids_grupos() -> dict:
+    """Termo do grupo ("frutos do mar") -> ids dos alergenicos que ele cobre."""
+    return {
+        grupo["termo"]: grupo["ids"]
+        for grupo in _carregar_base()["alergenicos"].get("termos_ambiguos", [])
+    }
+
+
 def _extrair_pratos_alergenicos(texto: str) -> tuple:
-    """Pratos, pratos ambiguos e alergenicos (prato vence, salvo pista de alergia)."""
+    """Pratos, pratos ambiguos, alergenicos e grupos de alergenicos.
+
+    Prato vence, salvo pista de alergia: "risoto de frutos do mar" e prato;
+    "sem frutos do mar" e o grupo. Os ids de um grupo entram em alergenicos.
+    """
     alergenicos = _casar_termos(texto, _indice_alergenicos(), [])
     com_pista = [(i, f) for i, f, _, _ in alergenicos if _RE_PISTA_ALERGIA.search(texto[:i])]
 
@@ -213,15 +265,58 @@ def _extrair_pratos_alergenicos(texto: str) -> tuple:
         else:
             pratos.append(candidatos[0])
 
-    ids_alergenicos = [
-        ident for inicio, fim, _, ident in alergenicos
-        if not _sobrepoe(inicio, fim, spans_pratos)
-    ]
-    return _unicos(pratos), ambiguos, _unicos(ids_alergenicos)
+    ids_alergenicos, grupos = [], []
+    for inicio, fim, _, valor in alergenicos:
+        if _sobrepoe(inicio, fim, spans_pratos):
+            continue
+        if isinstance(valor, tuple):
+            grupos.append(valor[1])
+            ids_alergenicos += _ids_grupos()[valor[1]]
+        else:
+            ids_alergenicos.append(valor)
+    return _unicos(pratos), ambiguos, _unicos(ids_alergenicos), _unicos(grupos)
 
 
 def _extrair_restricoes(texto: str) -> list:
     return [nome for nome, padrao in _RESTRICOES.items() if re.search(padrao, texto)]
+
+
+def _extrair_categorias(texto: str) -> list:
+    return [nome for nome, padrao in _CATEGORIAS.items() if re.search(padrao, texto)]
+
+
+def _valor(texto: str) -> float:
+    """'49,90' -> 49.9."""
+    return float(texto.replace(",", "."))
+
+
+def _extrair_preco(texto: str) -> dict | None:
+    """Faixa de preco e ordem pedidas: {"min", "max", "ordem"}; None se nao ha.
+
+    "ate 50 reais" -> max 50; "acima de 100 reais" -> min 100; "entre 50 e
+    100 reais" -> min 50 e max 100; "mais barato"/"barato" -> ordem "barato";
+    "mais caro" -> ordem "caro".
+    """
+    if not _RE_CONTEXTO_PRECO.search(texto):
+        return None
+    minimo = maximo = None
+    entre = _RE_PRECO_ENTRE.search(texto)
+    if entre:
+        minimo, maximo = sorted((_valor(entre.group(1)), _valor(entre.group(2))))
+    else:
+        achado = _RE_PRECO_MAX.search(texto)
+        maximo = _valor(achado.group(1)) if achado else None
+        achado = _RE_PRECO_MIN.search(texto)
+        minimo = _valor(achado.group(1)) if achado else None
+    if _RE_MAIS_CARO.search(texto):
+        ordem = "caro"
+    elif _RE_MAIS_BARATO.search(texto):
+        ordem = "barato"
+    else:
+        ordem = None
+    if minimo is None and maximo is None and ordem is None:
+        return None
+    return {"min": minimo, "max": maximo, "ordem": ordem}
 
 
 def _numero(token: str) -> int:
@@ -380,7 +475,8 @@ def _extrair_nome(original: str, texto: str) -> str | None:
 
 
 def extrair_entidades(texto: str, referencia: datetime | None = None) -> dict:
-    """Extrai pratos, alergenicos, restricoes, pessoas, data, horario, periodo e nome.
+    """Extrai pratos, alergenicos (e grupos), restricoes, categorias, preco,
+    pessoas, data, horario, periodo e nome.
 
     `referencia` e o "agora" usado para datas relativas (padrao: agora no
     FUSO_HORARIO). Sempre devolve todas as chaves, com None ou vazio.
@@ -389,7 +485,7 @@ def extrair_entidades(texto: str, referencia: datetime | None = None) -> dict:
         referencia = datetime.now(ZoneInfo(FUSO_HORARIO))
     normalizado = _normalizar(texto or "")
 
-    pratos, pratos_ambiguos, alergenicos = _extrair_pratos_alergenicos(normalizado)
+    pratos, pratos_ambiguos, alergenicos, grupos = _extrair_pratos_alergenicos(normalizado)
     data = _extrair_data(normalizado, referencia.date())
     periodo = _extrair_periodo(normalizado)
     horario, horario_ambiguo = _extrair_horario(normalizado, periodo)
@@ -398,7 +494,10 @@ def extrair_entidades(texto: str, referencia: datetime | None = None) -> dict:
         "pratos": pratos,
         "pratos_ambiguos": pratos_ambiguos,
         "alergenicos": alergenicos,
+        "grupos_alergenicos": grupos,
         "restricoes": _extrair_restricoes(normalizado),
+        "categorias": _extrair_categorias(normalizado),
+        "preco": _extrair_preco(normalizado),
         "pessoas": _extrair_pessoas(normalizado),
         "data": data.isoformat() if data else None,
         "dia_semana": _DIAS_SEMANA[data.weekday()] if data else None,

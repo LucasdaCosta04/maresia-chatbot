@@ -95,6 +95,115 @@ def test_estacionamento():
     assert "costuma lotar" in texto
 
 
+@pytest.mark.parametrize("mensagem", ["é pago?", "cobra alguma coisa?", "é grátis?"])
+def test_custo_do_estacionamento_usa_o_campo_gratuito(mensagem):
+    assert BASE["restaurante"]["estacionamento"]["gratuito"] is True
+    assert responder(mensagem).startswith("O estacionamento é gratuito, com 20 vagas.")
+
+
+def test_estacionamento_pago_se_a_base_mudar():
+    base = {**BASE, "restaurante": {**BASE["restaurante"]}}
+    base["restaurante"]["estacionamento"] = {**BASE["restaurante"]["estacionamento"], "gratuito": False}
+    assert responder_horario_localizacao("é pago?", base, QUARTA_MEIO_DIA).startswith(
+        "O estacionamento é pago."
+    )
+
+
+def test_pergunta_completa_de_estacionamento_nao_repete_o_custo():
+    texto = responder("o estacionamento é gratuito?")
+    assert texto.startswith("Temos estacionamento próprio e gratuito")
+    assert texto.count("gratuito") == 1
+
+
+def test_dialogo_e_pago_depois_de_estacionamento_herda(gerenciador):
+    from chatbot.dialogo import EstadoConversa as Estado
+
+    estado = Estado()
+    estado.assunto_anterior = "horario_localizacao"
+    texto = gerenciador._responder_intencao("horario_localizacao", estado, "e é pago?")
+    assert texto.startswith("O estacionamento é gratuito")
+
+
+def test_estacionar_perto_nao_puxa_endereco():
+    assert "Rendeiras" not in responder("dá pra estacionar perto?")
+
+
+@pytest.mark.parametrize(
+    "mensagem", ["qual o cep de vcs", "fica perto da praia?", "fica longe de jurerê?"]
+)
+def test_cep_e_distancia_respondem_o_endereco(mensagem):
+    texto = responder(mensagem)
+    assert "Rendeiras" in texto
+    assert "CEP" in texto
+
+
+@pytest.mark.parametrize("mensagem", ["tá aberto?", "vocês estão abertos?", "estão funcionando?"])
+def test_ta_aberto_sem_agora_e_aberto_agora(mensagem):
+    assert responder(mensagem, QUARTA_MEIO_DIA).startswith("Sim, estamos abertos agora!")
+
+
+def test_respostas_fixas_de_horario_nao_afirmam_um_assunto():
+    # Sorteadas quando nenhum subtema casa: nao podem trazer endereco ou horario.
+    fixas = next(
+        i["respostas_fixas"] for i in BASE["intencoes"] if i["intencao"] == "horario_localizacao"
+    )
+    for texto in fixas:
+        assert "Rendeiras" not in texto
+        assert "Abrimos" not in texto
+
+
+# --- Horario geral ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "mensagem",
+    [
+        "qual o horário de funcionamento?",
+        "qual o horario de atendimento?",
+        "qual o horário de vocês?",
+        "abre quando?",
+        "que dias vcs abrem",
+    ],
+)
+def test_horario_geral_lista_a_semana(mensagem):
+    texto = responder(mensagem)
+    assert texto.startswith("Nosso horário de funcionamento:")
+    assert "Segunda, fechado" in texto
+    assert "Terça a quinta, almoço das 11:30 às 15:00 e jantar das 18:30 às 22:30" in texto
+    assert "Sexta e sábado, almoço das 11:30 às 15:30 e jantar das 18:30 às 23:30" in texto
+    assert "Domingo, almoço das 11:30 às 16:00" in texto
+    assert "30 minutos antes" in texto
+
+
+def test_horario_geral_com_feriado_traz_observacao():
+    texto = responder("vocês abrem em feriado?")
+    assert "Segunda, fechado" in texto
+    assert "Em feriados seguimos o horário do dia da semana." in texto
+
+
+def test_horario_geral_sem_feriado_nao_traz_observacao():
+    assert "feriados" not in responder("qual o horário de funcionamento?")
+
+
+def test_aberto_agora_tem_prioridade_sobre_horario_geral():
+    texto = responder("funciona agora?", QUARTA_MEIO_DIA)
+    assert texto.startswith("Sim, estamos abertos agora!")
+    assert "Nosso horário de funcionamento" not in texto
+
+
+def test_horario_geral_junto_com_endereco():
+    texto = responder("onde fica e que horas abrem?")
+    assert texto.index("Rendeiras") < texto.index("Nosso horário de funcionamento")
+
+
+def test_dialogo_horario_de_funcionamento_responde_a_semana(gerenciador):
+    estado = EstadoConversa()
+    resposta = gerenciador._responder_intencao(
+        "horario_localizacao", estado, "qual o horário de funcionamento?"
+    )
+    assert resposta.startswith("Nosso horário de funcionamento:")
+
+
 # --- Varios subtemas e nenhum ----------------------------------------------------
 
 
@@ -106,7 +215,7 @@ def test_dois_subtemas_na_ordem_da_mensagem():
     assert texto.index("20 vagas") < texto.index("Rendeiras")
 
 
-@pytest.mark.parametrize("mensagem", ["qual o horário de vocês?", "", "abre quando?"])
+@pytest.mark.parametrize("mensagem", ["tem manobrista?", "", "o acesso é tranquilo?"])
 def test_sem_subtema_devolve_none(mensagem):
     assert responder(mensagem) is None
 
@@ -128,7 +237,7 @@ def test_dialogo_sem_data_com_subtema_usa_conhecimento(gerenciador):
 
 def test_dialogo_sem_data_sem_subtema_mantem_respostas_fixas(gerenciador):
     texto = gerenciador._responder_intencao(
-        "horario_localizacao", EstadoConversa(), "qual o horário de vocês?"
+        "horario_localizacao", EstadoConversa(), "tem manobrista?"
     )
     assert texto in gerenciador.respostas_fixas["horario_localizacao"]
 

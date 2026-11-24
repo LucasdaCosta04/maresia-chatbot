@@ -58,6 +58,7 @@ MENSAGENS_REGRAS = {
         "Posso ajudar com {assunto_1}, {assunto_2} ou {assunto_3}. Em que posso ajudar? 🌊"
     ),
     "despedida": "Eu que agradeço! Até mais e bom apetite. 🌊",
+    "contato": "Você pode falar com a gente pelo WhatsApp {whatsapp} ou pelo telefone {telefone}.",
     "pedidos_multiplos": "Você pediu mais de uma coisa: {assuntos}. Por qual começamos?",
 }
 
@@ -97,6 +98,18 @@ MENSAGENS_RESERVA = {
     "alem_janela": "Aceitamos reservas com até {dias} dias de antecedência, ou seja, até {limite}.",
     "pessoas_minimo": "A reserva precisa ser para pelo menos {minimo}.",
     "acima_limite": "{mensagem} Fale com a nossa equipe pelo WhatsApp {whatsapp} ou pelo telefone {telefone}.",
+    "regra_antecedencia": (
+        "A reserva precisa ser feita com pelo menos {minimo} de antecedência, e dá para "
+        "reservar com até {maximo} de antecedência. {janela}"
+    ),
+    "regra_pessoas": (
+        "Pelo chat eu faço reservas de {minimo} a {maximo} pessoas. Para grupos maiores, fale "
+        "com a nossa equipe pelo WhatsApp {whatsapp} ou pelo telefone {telefone}."
+    ),
+    "acima_limite_alternativa": (
+        "Se o grupo for de até {maximo} pessoas, eu reservo por aqui: é só me dizer, "
+        "por exemplo, \"quero reservar para 8 pessoas\"."
+    ),
     "horario_fora": "Esse horário está fora do nosso período de reservas. {janelas}",
     "antecedencia": "A reserva precisa ser feita com pelo menos {horas} de antecedência.",
 }
@@ -116,12 +129,98 @@ MENSAGENS_CONSULTA = {
     "nao_contem": "Não, {prato} não contém {alergenico}.",
     "restricao_sim": "Sim, {prato} é uma opção {restricao}.",
     "restricao_nao": "Não, {prato} não é uma opção {restricao}.",
-    "lista_restricao": "Opções {restricao}: {pratos}.",
-    "lista_sem_alergenico": "Pratos sem {alergenico}: {pratos}.",
-    "lista_com_alergenico": "Pratos que levam {alergenico}: {pratos}.",
-    "lista_vazia": "No momento não temos pratos {criterio}.",
     "prato_ambiguo": "Temos {opcoes}. Sobre qual você quer saber?",
+    "cardapio_completo": (
+        "Este é o nosso cardápio:\n\n{lista}\n\n"
+        "Quer saber os ingredientes ou os alergênicos de algum prato? É só me dizer o nome."
+    ),
+    "titulo_categoria": "{categoria}:",
+    "item_lista": "   • {nome} – {preco}",
+    "lista_filtrada": "{titulo}:\n{lista}",
+    "lista_filtrada_vazia": "No momento não temos {titulo}.",
+    "grupo_considerado": "Considerei {grupo} como {itens}, e deixei de fora também os pratos que podem ter traços deles.",
+    "grupo_peixe": "Se a alergia também for a peixe, me avise que eu refaço a lista.",
+    "faixa_ate": "até {maximo}",
+    "faixa_a_partir": "a partir de {minimo}",
+    "faixa_entre": "entre {minimo} e {maximo}",
+    "ordem_barato_m": "o mais barato",
+    "ordem_barato_f": "a mais barata",
+    "ordem_caro_m": "o mais caro",
+    "ordem_caro_f": "a mais cara",
+    "ordem_por_categoria": " de cada categoria",
+    "preco_mais_barato": "O item mais barato do cardápio é {nome} – {preco}.",
+    "porcao": "Pratos que servem {pessoas}:\n{lista}",
+    "porcao_prato": "{prato} serve {serve}.",
+    "porcao_vazia": "No momento não temos pratos que sirvam {pessoas}. Nossos pratos servem {opcoes}.",
+    "nao_encontrado": (
+        "Não encontrei {termo} no nosso cardápio. Se quiser, me peça \"cardápio\" "
+        "que eu te mostro todos os pratos."
+    ),
+    "sem_bebidas": (
+        "Ainda não tenho aqui as informações de bebidas. A nossa equipe te passa "
+        "as opções pelo WhatsApp {whatsapp} ou pelo telefone {telefone}."
+    ),
 }
+
+# Pergunta de porcao ("tem prato para 2 pessoas?"): fala de prato/porcao e
+# nao de reserva/mesa. Sem esta regra, "2 pessoas" abria o fluxo de reserva.
+_RE_PORCAO = re.compile(r"\b(?:pratos?|porcao|porcoes|serve|servem|individua\w*)\b")
+_RE_INDIVIDUAL = re.compile(r"\bindividua\w*\b")
+_RE_FALA_DE_RESERVA = re.compile(r"\b(?:reserv\w*|mesas?|lugar|lugares)\b")
+# Bebidas: a base nao tem a carta de bebidas, entao a Maresia indica a equipe.
+_RE_BEBIDAS = re.compile(
+    r"\b(?:bebidas?|beber|vinhos?|cervejas?|chopp?|chope|caipirinhas?|drinks?|drinques?"
+    r"|sucos?|refrigerantes?|refri|agua|cafe|cafezinho|coqueteis|coquetel|alcool\w*)\b"
+)
+# "tem pizza?", "voces servem rodizio?": o que o cliente procura, no texto
+# original (com acento), para responder que nao esta no cardapio.
+_RE_TERMO_PROCURADO = re.compile(
+    r"^\s*(?:(?:voc[eê]s|vcs|vc)\s+)?(?:t[eê]m|servem|serve|vendem|vende|fazem|faz)\s+"
+    r"(?:(?:algum|alguma|um|uma|o|a)\s+)?(?P<termo>[^?!.,;]+?)\s*[?!.]*\s*$",
+    re.IGNORECASE,
+)
+_MAX_PALAVRAS_TERMO = 4
+
+# Categorias do cardapio na ordem de exibicao: nome no plural e se o
+# substantivo e feminino (para concordar "sobremesas veganas", "pratos veganos").
+_CATEGORIAS_CARDAPIO = {
+    "entrada": ("Entradas", True),
+    "prato_principal": ("Pratos principais", False),
+    "acompanhamento": ("Acompanhamentos", False),
+    "salada": ("Saladas", True),
+    "sobremesa": ("Sobremesas", True),
+}
+# Restricao -> adjetivo no plural (feminino, masculino).
+_ADJETIVOS_RESTRICOES = {
+    "vegetariano": ("vegetarianas", "vegetarianos"),
+    "vegano": ("veganas", "veganos"),
+    "sem_gluten": ("sem glúten", "sem glúten"),
+    "sem_lactose": ("sem lactose", "sem lactose"),
+}
+# Alergenico que a restricao ja cobre: em "sem gluten" vale o campo
+# sem_gluten do prato, como na lista de restricao.
+_ALERGENICO_DA_RESTRICAO = {"sem_gluten": "trigo_gluten", "sem_lactose": "leite"}
+# Pedido do cardapio sem criterio ("quero ver o cardapio", "o que voces servem").
+# Oracoes de uma mensagem ja pre-processada (sem pontuacao), para achar o
+# alergenico que o cliente LIBERA: "sou alergico a camarao mas como peixe".
+_RE_SEPARA_ORACOES = re.compile(r"\b(?:mas|porem|so que|entretanto|contudo|e)\b")
+_RE_PONTUACAO_ORACOES = re.compile(r"[,;.!?]")
+# A liberacao vem no inicio da oracao ("como peixe") ou no fim ("peixe eu
+# como", "leite tudo bem"). Perguntas ("o que posso comer", "quais pratos...")
+# saem antes, para "camarao e peixe o que posso comer" nao liberar o peixe.
+_RE_PERGUNTA_FINAL = re.compile(r"\b(?:o que|quais?|que pratos?|tem algum)\b.*$")
+_RE_LIBERADO_INICIO = re.compile(
+    r"^\s*(?:eu )?(?:como|posso comer|pode ter|pode levar"
+    r"|nao tenho (?:alergia|problema) (?:a|ao|com|de))\b"
+)
+_RE_LIBERADO_FIM = re.compile(
+    r"\b(?:eu )?(?:como|posso comer|pode|pode ter|tudo bem|sem problema|liberad[oa]s?)\s*$"
+)
+# Continuacao que fala do mesmo prato do turno anterior ("e camarao?").
+_RE_CONTINUACAO = re.compile(r"^(?:e|tambem)\b")
+_RE_VER_CARDAPIO = re.compile(
+    r"\b(?:cardapio|menu|pratos|opcoes|o que (?:voces )?(?:tem|servem|serve|oferecem))\b"
+)
 
 # Restricoes de extrair_entidades -> como aparecem no texto ("opcao vegana").
 _NOMES_RESTRICOES = {
@@ -164,6 +263,12 @@ _RE_ATENDENTE = re.compile(
     r"\b(?:atendentes?|humanos?|gerentes?)\b"
     r"|\bfalar com (?:uma |alguma |um )?(?:pessoa|alguem)\b"
     r"|\bpessoa (?:de verdade|real)\b"
+)
+
+# a2) Contato (telefone/WhatsApp da base): vale para qualquer intencao, porque
+# "tem whatsapp?" nao tem cara de nenhuma das quatro.
+_RE_CONTATO = re.compile(
+    r"\b(?:telefones?|fone|celular|ligar|ligo|liga|ligacao|whats\w*|zap|zapzap|contatos?)\b"
 )
 
 # Palavras de cortesia que podem acompanhar um comando curto.
@@ -222,6 +327,16 @@ _RE_POLITICAS = (
         r"\b(?:alter\w*|mudar|muda|remarc\w*|antecip\w*|adia\w*|troc\w*)\b"
     )),
     ("politica_atraso", re.compile(r"\b(?:atras\w*|toleranc\w*)\b")),
+    # Duvidas sobre as regras de uma reserva nova (montadas com os numeros
+    # da base em _regra_reserva, nao abrem o fluxo).
+    ("regra_antecedencia", re.compile(
+        r"\b(?:antecedencia|com quanto tempo|quanto tempo antes|quantos dias antes"
+        r"|ate quando (?:posso|da para|consigo) reservar)\b"
+    )),
+    ("regra_pessoas", re.compile(
+        r"\b(?:quantas pessoas (?:no maximo|posso|da|pode|cabe\w*)|maximo de pessoas"
+        r"|limite de pessoas|numero maximo)\b"
+    )),
 )
 
 
@@ -254,9 +369,15 @@ _RE_PRONOME = re.compile(
     r"|dele|dela|nele|nela|desse|dessa|nesse|nessa|disso|nisso)\b"
 )
 # Pista de que o cliente quer EVITAR o alergenico ("sou alergico a camarao",
-# "sem lactose"). Sem ela, "tem camarao?" lista os pratos que levam camarao.
+# "sem lactose", "quais pratos nao tem camarao"). Sem ela, "tem camarao?"
+# lista os pratos que levam camarao.
+_NEGACOES_EVITAR = (
+    r"nao (?:como|posso|pode|quero|tem|tenham?|levam?|leve|contem|contenham?"
+    r"|possuem?|vem com|vao)"
+)
 _RE_EVITAR = re.compile(
-    r"\b(?:sem|alergi\w*|alergic\w*|intoleran\w*|nao (?:como|posso|pode)|evit\w*|restric\w*)\b"
+    r"\b(?:sem|livres? de|alergi\w*|alergic\w*|intoleran\w*|" + _NEGACOES_EVITAR
+    + r"|evit\w*|restric\w*)\b"
 )
 
 
@@ -275,6 +396,10 @@ class EstadoConversa:
     solta ("Sabado").
     data_solta: {"data", "horario"} de uma data recebida sem assunto, enquanto
     o cliente nao escolhe entre reserva e horario (esclarecimento pendente).
+    filtros_cardapio: filtros da ultima lista do cardapio (categorias,
+    restricoes, alergenicos, grupos, evitar), para a continuacao herdar
+    ("sou alergico a frutos do mar" -> "e entrada?"). None quando a ultima
+    resposta do cardapio foi sobre um prato.
     """
 
     falhas_seguidas: int = 0
@@ -286,6 +411,7 @@ class EstadoConversa:
     ultimo_prato: str | None = None
     ultima_data: str | None = None
     data_solta: dict | None = None
+    filtros_cardapio: dict | None = None
 
     def reiniciar(self) -> None:
         """Volta o estado ao inicio da conversa."""
@@ -297,6 +423,7 @@ class EstadoConversa:
         self.etapa_reserva = None
         self.ultimo_prato = None
         self.ultima_data = None
+        self.filtros_cardapio = None
         self.data_solta = None
 
     def encerrar_reserva(self) -> None:
@@ -390,6 +517,66 @@ def _juntar(itens: list[str]) -> str:
     return ", ".join(itens[:-1]) + " e " + itens[-1]
 
 
+def _filtros_vazios() -> dict:
+    """Filtros do cardapio sem nenhum criterio (cardapio completo)."""
+    return {
+        "categorias": [], "restricoes": [], "alergenicos": [], "grupos": [], "evitar": False,
+        "preco_min": None, "preco_max": None, "ordem": None,
+    }
+
+
+def _mesclar_filtros(anterior: dict, novo: dict) -> dict:
+    """Soma os filtros de uma continuacao aos da lista anterior.
+
+    - categoria nova substitui a anterior ("e de sobremesa?");
+    - restricoes se acumulam ("e sem lactose tambem?");
+    - alergenicos no mesmo sentido (evitar/procurar) se acumulam; em sentido
+      diferente, os novos substituem ("tem camarao?" depois de "sem gluten");
+    - sem alergenico novo, os anteriores continuam valendo (a alergia nao
+      se perde em "e entrada?");
+    - faixa de preco nova substitui a anterior; sem faixa nova, a anterior
+      continua ("ate 50 reais" -> "e sem gluten?");
+    - "mais barato"/"mais caro" vale so para a mensagem em que aparece.
+    """
+    tem_faixa_nova = novo.get("preco_min") is not None or novo.get("preco_max") is not None
+    faixa = novo if tem_faixa_nova else anterior
+    if novo["alergenicos"]:
+        if anterior["alergenicos"] and anterior["evitar"] == novo["evitar"]:
+            alergenicos = _unicos(anterior["alergenicos"] + novo["alergenicos"])
+            grupos = _unicos(anterior["grupos"] + novo["grupos"])
+        else:
+            alergenicos, grupos = novo["alergenicos"], novo["grupos"]
+        evitar = novo["evitar"]
+    else:
+        alergenicos, grupos, evitar = anterior["alergenicos"], anterior["grupos"], anterior["evitar"]
+    return {
+        "categorias": novo["categorias"] or anterior["categorias"],
+        "restricoes": _unicos(anterior["restricoes"] + novo["restricoes"]),
+        "alergenicos": alergenicos,
+        "grupos": grupos,
+        "evitar": evitar,
+        "preco_min": faixa.get("preco_min"),
+        "preco_max": faixa.get("preco_max"),
+        "ordem": novo.get("ordem"),
+    }
+
+
+def _extremo_por_categoria(pratos: list[dict], ordem: str) -> list[dict]:
+    """O prato mais barato (ordem "barato") ou mais caro ("caro") de cada categoria."""
+    escolha = min if ordem == "barato" else max
+    extremos = []
+    for categoria in _CATEGORIAS_CARDAPIO:
+        da_categoria = [p for p in pratos if p["categoria"] == categoria]
+        if da_categoria:
+            extremos.append(escolha(da_categoria, key=lambda p: p["preco"]))
+    return extremos
+
+
+def _preco(valor: float) -> str:
+    """59.9 -> 'R$ 59,90'."""
+    return f"R$ {valor:.2f}".replace(".", ",")
+
+
 def _unicos(itens: list) -> list:
     """Remove repetidos mantendo a ordem."""
     return list(dict.fromkeys(itens))
@@ -443,6 +630,21 @@ class GerenciadorDialogo:
             texto_resposta = self._resolver_esclarecimento(escolhida, estado, mensagem)
             return Resposta(texto_resposta, escolhida, "aceita")
 
+        # "tem prato para 2 pessoas?": porcao do cardapio, nao reserva.
+        texto_porcao = self._consultar_porcao(mensagem, texto)
+        if texto_porcao is not None:
+            estado.falhas_seguidas = 0
+            estado.esclarecimento = None
+            estado.assunto_anterior = "cardapio_alergenicos"
+            estado.filtros_cardapio = _filtros_vazios()
+            return Resposta(texto_porcao, "cardapio_alergenicos", "aceita")
+
+        # "tem algo ate 50 reais?", "qual o prato mais barato?": filtro de
+        # preco do cardapio, qualquer que seja a intencao do classificador.
+        resposta_preco = self._consultar_preco(mensagem, texto, estado)
+        if resposta_preco is not None:
+            return resposta_preco
+
         multiplos = detectar_pedidos_multiplos(self.modelo, mensagem)
         if multiplos is not None:
             resposta = self._perguntar_por_onde_comecar(multiplos, estado)
@@ -475,8 +677,9 @@ class GerenciadorDialogo:
         Herda quando TODAS valem:
         a) existe assunto_anterior;
         b) a mensagem e curta e traz uma entidade util para esse assunto,
-           mas nao o objeto principal (a data, no horario; o prato, com um
-           pronome apontando para ultimo_prato, no cardapio);
+           mas nao o objeto principal (a data, no horario; no cardapio, o
+           prato, com um pronome ou um "e ..." apontando para ultimo_prato,
+           ou os filtros da ultima lista, que se somam aos novos);
         c) o classificador nao aceitou outra intencao (ex.: "quero
            reservar uma mesa" depois de uma pergunta de horario nao herda).
         """
@@ -489,29 +692,50 @@ class GerenciadorDialogo:
             return None
 
         entidades = extrair_entidades(mensagem, self.agora())
+        herdar_filtros = False
         if assunto == "horario_localizacao":
-            # So a data muda; o "que horas abrem" vem do turno anterior.
+            # Com data, so a data muda ("e no domingo?"). Sem data, herda se a
+            # continuacao tem um subtema da base ("e e pago?", "e o endereco?").
             if not entidades["data"]:
-                return None
+                # Import local: chatbot.conhecimento importa deste modulo.
+                from chatbot.conhecimento import responder_horario_localizacao
+
+                if responder_horario_localizacao(mensagem, self.base, self.agora()) is None:
+                    return None
         elif assunto == "cardapio_alergenicos":
-            # Alergenico/restricao + pronome, sem prato: o prato e o ultimo.
             tem_criterio = entidades["alergenicos"] or entidades["restricoes"]
             sem_prato = not entidades["pratos"] and not entidades["pratos_ambiguos"]
-            if not (tem_criterio and sem_prato and _RE_PRONOME.search(texto) and estado.ultimo_prato):
+            # A ultima resposta foi sobre um prato (filtros_cardapio None):
+            # "ele tem gluten?" ou "e camarao?" falam desse prato.
+            sobre_o_prato = _RE_PRONOME.search(texto) or (
+                estado.filtros_cardapio is None and _RE_CONTINUACAO.match(texto)
+            )
+            if tem_criterio and sem_prato and estado.ultimo_prato and sobre_o_prato:
+                entidades["pratos"] = [estado.ultimo_prato]
+            elif (
+                sem_prato
+                and (tem_criterio or entidades["categorias"])
+                and estado.filtros_cardapio is not None
+            ):
+                # A ultima resposta foi uma lista: os filtros dela se somam
+                # aos novos ("sou alergico a frutos do mar" -> "e entrada?").
+                herdar_filtros = True
+            else:
                 return None
-            entidades["pratos"] = [estado.ultimo_prato]
         else:
             return None
 
         estado.falhas_seguidas = 0
         estado.esclarecimento = None
-        texto_resposta = self._responder_intencao(assunto, estado, mensagem, entidades=entidades)
+        texto_resposta = self._responder_intencao(
+            assunto, estado, mensagem, entidades=entidades, herdar_filtros=herdar_filtros
+        )
         return Resposta(texto_resposta, assunto, "aceita", decisao.confianca, herdou_contexto=True)
 
     # --- Regras prioritarias --------------------------------------------------
 
     def _aplicar_regras(self, texto: str, estado: EstadoConversa) -> Resposta | None:
-        """Testa as regras na ordem: atendente, cancelar, ajuda, saudacao/despedida.
+        """Testa as regras na ordem: atendente, cancelar, contato, ajuda, saudacao/despedida.
 
         Qualquer regra que case zera falhas_seguidas: a mensagem foi entendida.
         Com uma reserva em andamento, cancelar encerra o fluxo e as demais
@@ -529,6 +753,16 @@ class GerenciadorDialogo:
             estado.encerrar_reserva()
             estado.esclarecimento = None
             return Resposta(MENSAGENS_REGRAS["cancelar"], None, "regra")
+
+        if _RE_CONTATO.search(texto):
+            estado.falhas_seguidas = 0
+            restaurante = self.base["restaurante"]
+            texto_resposta = MENSAGENS_REGRAS["contato"].format(
+                whatsapp=restaurante["whatsapp"], telefone=restaurante["telefone"]
+            )
+            if em_reserva:
+                texto_resposta += "\n\n" + self._lembrete(estado)
+            return Resposta(texto_resposta, None, "regra")
 
         for nome, regex in (
             ("ajuda", _RE_AJUDA),
@@ -612,10 +846,18 @@ class GerenciadorDialogo:
 
         Se o pendente veio de uma data solta, a data volta a ser usada:
         a reserva comeca com o slot data (e horario) preenchido; o horario
-        responde o funcionamento daquele dia.
+        responde o funcionamento daquele dia. Se a resposta traz uma data
+        propria ("e domingo?" -> esclarecimento -> "e segunda?"), vale a nova.
         """
         pendente = estado.esclarecimento
         data_solta = estado.data_solta if pendente else None
+        if data_solta:
+            novas = extrair_entidades(mensagem, self.agora())
+            if novas["data"]:
+                data_solta = {
+                    "data": novas["data"],
+                    "horario": novas.get("horario") or data_solta.get("horario"),
+                }
         estado.falhas_seguidas = 0
         estado.esclarecimento = None
         estado.data_solta = None
@@ -702,6 +944,7 @@ class GerenciadorDialogo:
         mensagem: str = "",
         resolveu: list[str] | None = None,
         entidades: dict | None = None,
+        herdar_filtros: bool = False,
     ) -> str:
         """Monta a resposta de uma intencao aceita.
 
@@ -715,6 +958,8 @@ class GerenciadorDialogo:
         `resolveu` traz as candidatas do esclarecimento que esta resposta
         encerrou, se houver. `entidades` permite passar entidades ja
         completadas pela heranca de contexto (senao, sao extraidas da mensagem).
+        `herdar_filtros` soma aos filtros da mensagem os da ultima lista do
+        cardapio (estado.filtros_cardapio).
         """
         if intencao == "reserva":
             return self._iniciar_reserva(mensagem, estado)
@@ -734,7 +979,7 @@ class GerenciadorDialogo:
                 return texto
 
         if entidades and intencao == "cardapio_alergenicos":
-            texto = self._consultar_cardapio(mensagem, entidades, estado)
+            texto = self._consultar_cardapio(mensagem, entidades, estado, herdar_filtros)
             if texto is not None:
                 return texto
         return self._sortear(self.respostas_fixas[intencao])
@@ -757,14 +1002,20 @@ class GerenciadorDialogo:
         )
         return MENSAGENS_CONSULTA["dia_aberto"].format(turnos=turnos, **campos)
 
-    def _consultar_cardapio(self, mensagem: str, entidades: dict, estado: EstadoConversa) -> str | None:
+    def _consultar_cardapio(
+        self, mensagem: str, entidades: dict, estado: EstadoConversa, herdar_filtros: bool = False
+    ) -> str | None:
         """Responde sobre o cardapio a partir das entidades; None se nao ha nenhuma util.
 
         - prato + restricao: o prato atende a restricao?
         - prato + alergenico: o prato contem o alergenico?
         - so prato: descricao, preco e alergenicos do prato;
         - so restricao: pratos compativeis;
-        - so alergenico: pratos sem ele (se o cliente quer evitar) ou com ele.
+        - so alergenico: pratos sem ele (se o cliente quer evitar) ou com ele;
+        - categoria, grupo ("frutos do mar") ou varios criterios juntos: uma
+          lista so, com os pratos que passam em todos (_listar_filtrado);
+        - pedido do cardapio sem criterio ("quero ver o cardapio"): o
+          cardapio inteiro por categoria, com precos.
         """
         pratos = [p for p in entidades["pratos"] if p in self.pratos]
         alergenicos = [a for a in entidades["alergenicos"] if a in self.alergenicos]
@@ -779,6 +1030,7 @@ class GerenciadorDialogo:
         if pratos:
             # O pronome so aponta para um prato quando a resposta fala de um so.
             estado.ultimo_prato = pratos[0] if len(pratos) == 1 else None
+            estado.filtros_cardapio = None
             partes = []
             for id_prato in pratos:
                 # Restricao antes de alergenico: em "o pudim e sem lactose?" o
@@ -798,15 +1050,314 @@ class GerenciadorDialogo:
                 nomes += [self.pratos[c]["nome"] for c in candidatos if c in self.pratos]
             return MENSAGENS_CONSULTA["prato_ambiguo"].format(opcoes=_juntar(_unicos(nomes)))
 
-        if restricoes:
-            partes = [self._listar_restricao(r) for r in restricoes]
-            return self._com_aviso(" ".join(partes), [])
+        texto = preprocessar(mensagem)
+        evitar = bool(_RE_EVITAR.search(texto))
+        if evitar:
+            liberados = self._alergenicos_liberados(mensagem)
+            alergenicos = [a for a in alergenicos if a not in liberados]
+        filtros = {
+            "categorias": [c for c in entidades.get("categorias", []) if c in _CATEGORIAS_CARDAPIO],
+            "restricoes": restricoes,
+            "alergenicos": alergenicos,
+            "grupos": entidades.get("grupos_alergenicos", []),
+            "evitar": evitar,
+            "preco_min": (entidades.get("preco") or {}).get("min"),
+            "preco_max": (entidades.get("preco") or {}).get("max"),
+            "ordem": (entidades.get("preco") or {}).get("ordem"),
+        }
+        if herdar_filtros and estado.filtros_cardapio is not None:
+            # "e amendoim?" depois de "sou alergico a camarao": sem pista de
+            # sentido, um "e ..." continua no sentido da lista anterior.
+            if not filtros["evitar"] and _RE_CONTINUACAO.match(texto):
+                filtros["evitar"] = estado.filtros_cardapio["evitar"]
+            filtros = _mesclar_filtros(estado.filtros_cardapio, filtros)
+        cobertos = {_ALERGENICO_DA_RESTRICAO.get(r) for r in filtros["restricoes"]}
+        filtros["alergenicos"] = [a for a in filtros["alergenicos"] if a not in cobertos]
 
-        if alergenicos:
-            evitar = bool(_RE_EVITAR.search(preprocessar(mensagem)))
-            partes = [self._listar_por_alergenico(a, evitar) for a in alergenicos]
-            return self._com_aviso(" ".join(partes), alergenicos)
+        tem_preco = (
+            filtros["preco_min"] is not None or filtros["preco_max"] is not None or filtros["ordem"]
+        )
+        if filtros["restricoes"] or filtros["alergenicos"] or filtros["categorias"] or tem_preco:
+            estado.filtros_cardapio = filtros
+            return self._listar_filtrado(**filtros)
+        if _RE_VER_CARDAPIO.search(texto):
+            estado.filtros_cardapio = _filtros_vazios()
+            return self._cardapio_completo()
+        return self._fora_do_cardapio(mensagem, texto)
+
+    def _consultar_preco(self, mensagem: str, texto: str, estado: EstadoConversa) -> Resposta | None:
+        """Pergunta com faixa ou ordem de preco: lista do cardapio filtrada.
+
+        Nao vale quando a mensagem fala de reserva/mesa nem quando cita um
+        prato ("quanto custa o pudim?" segue o caminho normal). Continuacao
+        curta de uma lista ("e ate 100 reais?") herda os filtros dela.
+        """
+        if _RE_FALA_DE_RESERVA.search(texto):
+            return None
+        entidades = extrair_entidades(mensagem, self.agora())
+        if not entidades["preco"] or entidades["pratos"] or entidades["pratos_ambiguos"]:
+            return None
+        herdar = (
+            estado.assunto_anterior == "cardapio_alergenicos"
+            and estado.filtros_cardapio is not None
+            and len(texto.split()) <= MAX_PALAVRAS_HERANCA
+        )
+        texto_resposta = self._consultar_cardapio(mensagem, entidades, estado, herdar)
+        if texto_resposta is None:
+            return None
+        estado.falhas_seguidas = 0
+        estado.esclarecimento = None
+        estado.assunto_anterior = "cardapio_alergenicos"
+        return Resposta(texto_resposta, "cardapio_alergenicos", "aceita", herdou_contexto=herdar)
+
+    def _consultar_porcao(self, mensagem: str, texto: str) -> str | None:
+        """Pratos que servem N pessoas ("tem prato para 2 pessoas?", "prato individual").
+
+        So quando a mensagem fala de prato/porcao e de um numero de pessoas,
+        e nao de reserva/mesa. Se cita pratos ("o pudim serve 2 pessoas?"),
+        responde quantas pessoas cada um serve.
+        """
+        if not _RE_PORCAO.search(texto) or _RE_FALA_DE_RESERVA.search(texto):
+            return None
+        entidades = extrair_entidades(mensagem, self.agora())
+        pessoas = 1 if _RE_INDIVIDUAL.search(texto) else entidades["pessoas"]
+        if pessoas is None:
+            return None
+        citados = list(entidades["pratos"])
+        for candidatos in entidades["pratos_ambiguos"].values():
+            citados += candidatos
+        citados = [p for p in _unicos(citados) if p in self.pratos]
+        if citados:
+            return " ".join(
+                MENSAGENS_CONSULTA["porcao_prato"].format(
+                    prato=self.pratos[p]["nome"],
+                    serve=_plural(self.pratos[p]["serve_pessoas"], "pessoa", "pessoas"),
+                )
+                for p in citados
+            )
+        nome = _plural(pessoas, "pessoa", "pessoas")
+        pratos = [p for p in self.pratos.values() if p["serve_pessoas"] == pessoas]
+        if not pratos:
+            porcoes = sorted({p["serve_pessoas"] for p in self.pratos.values()})
+            opcoes = " ou ".join(str(n) for n in porcoes) + (" pessoa" if porcoes == [1] else " pessoas")
+            return MENSAGENS_CONSULTA["porcao_vazia"].format(pessoas=nome, opcoes=opcoes)
+        lista = "\n" + self._lista_por_categoria(pratos, com_titulos=True)
+        return MENSAGENS_CONSULTA["porcao"].format(pessoas=nome, lista=lista)
+
+    def _fora_do_cardapio(self, mensagem: str, texto: str) -> str | None:
+        """Pedido de algo que nao esta na base ("tem pizza?", "tem vinho?").
+
+        Bebidas: a base nao tem a carta, entao indica a equipe. Outro item
+        procurado ("tem X?", ate 4 palavras): diz que nao encontrou X no
+        cardapio, em vez de uma resposta fixa que desvia do assunto.
+        """
+        restaurante = self.base["restaurante"]
+        if _RE_BEBIDAS.search(texto):
+            return MENSAGENS_CONSULTA["sem_bebidas"].format(
+                whatsapp=restaurante["whatsapp"], telefone=restaurante["telefone"]
+            )
+        achado = _RE_TERMO_PROCURADO.match(mensagem)
+        if achado:
+            termo = achado.group("termo").strip().lower()
+            if 0 < len(termo.split()) <= _MAX_PALAVRAS_TERMO:
+                return MENSAGENS_CONSULTA["nao_encontrado"].format(termo=f"“{termo}”")
         return None
+
+    def _alergenicos_liberados(self, mensagem: str) -> set[str]:
+        """Alergenicos que o cliente diz que PODE comer ("mas como peixe").
+
+        Vale so a oracao com liberacao explicita (no inicio ou no fim) e sem
+        nenhuma pista de evitar: na duvida, o alergenico continua evitado
+        (por seguranca).
+        """
+        liberados = set()
+        # A pontuacao some no pre-processamento: separa por ela antes.
+        trechos = [preprocessar(t) for t in _RE_PONTUACAO_ORACOES.split(mensagem)]
+        for oracao in (o for t in trechos for o in _RE_SEPARA_ORACOES.split(t)):
+            oracao = _RE_PERGUNTA_FINAL.sub("", oracao).strip()
+            # A pista de evitar e conferida fora da propria liberacao ("nao
+            # tenho alergia a peixe" tem "alergia", mas libera o peixe).
+            inicio, fim = _RE_LIBERADO_INICIO.search(oracao), _RE_LIBERADO_FIM.search(oracao)
+            if inicio:
+                resto = oracao[inicio.end():]
+            elif fim:
+                resto = oracao[:fim.start()]
+            else:
+                continue
+            if not _RE_EVITAR.search(resto):
+                liberados.update(extrair_entidades(resto, self.agora())["alergenicos"])
+        return liberados
+
+    def _listar_filtrado(
+        self,
+        categorias: list[str],
+        restricoes: list[str],
+        alergenicos: list[str],
+        grupos: list[str],
+        evitar: bool,
+        preco_min: float | None = None,
+        preco_max: float | None = None,
+        ordem: str | None = None,
+    ) -> str:
+        """Pratos que passam em TODOS os criterios ao mesmo tempo.
+
+        - categorias: o prato e de uma delas;
+        - restricoes: o prato atende a todas (campos booleanos da base);
+        - alergenicos com evitar: o prato nao leva nenhum, nem como "pode
+          conter" (por seguranca); sem evitar: o prato leva algum deles;
+        - preco_min/preco_max: o preco esta na faixa (limites inclusos);
+        - ordem "barato"/"caro": so o mais barato (ou mais caro) de cada categoria.
+        Um grupo ("frutos do mar") ja chega expandido em alergenicos; aqui
+        so muda o titulo e acrescenta a explicacao do que foi considerado.
+        """
+        pratos = [
+            p for p in self.pratos.values()
+            if (not categorias or p["categoria"] in categorias)
+            and all(p.get(r) for r in restricoes)
+            and self._passa_alergenicos(p, alergenicos, evitar)
+            and (preco_min is None or p["preco"] >= preco_min)
+            and (preco_max is None or p["preco"] <= preco_max)
+        ]
+        titulo = self._titulo_lista(
+            categorias, restricoes, alergenicos, grupos, evitar, preco_min, preco_max
+        )
+        if preco_min is not None or preco_max is not None:
+            pratos.sort(key=lambda p: p["preco"])  # do mais barato ao mais caro
+        if ordem and pratos:
+            pratos = _extremo_por_categoria(pratos, ordem)
+            if len(categorias) == 1:
+                # "Sobremesas (a mais cara)", "Pratos principais (o mais barato)".
+                feminino = _CATEGORIAS_CARDAPIO[categorias[0]][1]
+                sufixo = MENSAGENS_CONSULTA[f"ordem_{ordem}_{'f' if feminino else 'm'}"]
+            else:
+                sufixo = (
+                    MENSAGENS_CONSULTA[f"ordem_{ordem}_m"] + MENSAGENS_CONSULTA["ordem_por_categoria"]
+                )
+            titulo = sufixo[0].upper() + sufixo[1:] if titulo == "Pratos" else f"{titulo} ({sufixo})"
+        if pratos:
+            # Com uma categoria so no pedido, o titulo ja diz qual e.
+            com_titulos = len(categorias) != 1
+            lista = self._lista_por_categoria(pratos, com_titulos)
+            if com_titulos:
+                lista = "\n" + lista  # linha em branco entre o titulo e a 1a categoria
+            texto_lista = MENSAGENS_CONSULTA["lista_filtrada"].format(titulo=titulo, lista=lista)
+        else:
+            texto_lista = MENSAGENS_CONSULTA["lista_filtrada_vazia"].format(
+                titulo=titulo[0].lower() + titulo[1:]
+            )
+            if preco_max is not None:
+                # Nada na faixa: diz o item mais barato do cardapio inteiro.
+                barato = min(self.pratos.values(), key=lambda p: p["preco"])
+                texto_lista += " " + MENSAGENS_CONSULTA["preco_mais_barato"].format(
+                    nome=barato["nome"], preco=_preco(barato["preco"])
+                )
+
+        partes = []
+        if grupos and evitar:
+            for grupo in grupos:
+                ids = self._ids_grupo(grupo)
+                partes.append(MENSAGENS_CONSULTA["grupo_considerado"].format(
+                    grupo=f"“{grupo}”", itens=_juntar([self._nome_alergenico(a) for a in ids])
+                ))
+            if "peixes" not in alergenicos and any(
+                "peixes" in p["alergenicos"] or "peixes" in p.get("pode_conter", []) for p in pratos
+            ):
+                partes.append(MENSAGENS_CONSULTA["grupo_peixe"])
+
+        # Observacoes e aviso num paragrafo separado, depois da lista.
+        if alergenicos or restricoes:
+            partes = [self._com_aviso(" ".join(partes), alergenicos).strip()]
+        if partes and partes[0]:
+            return texto_lista + "\n\n" + partes[0]
+        return texto_lista
+
+    @staticmethod
+    def _passa_alergenicos(prato: dict, alergenicos: list[str], evitar: bool) -> bool:
+        """Sem alergenicos, passa; evitando, nao pode ter nenhum; senao, precisa ter algum."""
+        if not alergenicos:
+            return True
+        presentes = set(prato["alergenicos"])
+        if evitar:
+            presentes |= set(prato.get("pode_conter", []))
+            return not presentes & set(alergenicos)
+        return bool(presentes & set(alergenicos))
+
+    def _titulo_lista(
+        self,
+        categorias: list[str],
+        restricoes: list[str],
+        alergenicos: list[str],
+        grupos: list[str],
+        evitar: bool,
+        preco_min: float | None = None,
+        preco_max: float | None = None,
+    ) -> str:
+        """'Pratos principais sem frutos do mar', 'Sobremesas veganas', 'Pratos até R$ 50,00'..."""
+        if categorias:
+            nomes = [_CATEGORIAS_CARDAPIO[c][0] for c in categorias]
+            titulo = nomes[0] + "".join(
+                (" e " if i == len(nomes) - 1 else ", ") + n.lower() for i, n in enumerate(nomes[1:], 1)
+            )
+            feminino = all(_CATEGORIAS_CARDAPIO[c][1] for c in categorias)
+        elif restricoes and not alergenicos:
+            titulo, feminino = "Opções", True
+        else:
+            titulo, feminino = "Pratos", False
+
+        if restricoes:
+            titulo += " " + _juntar([_ADJETIVOS_RESTRICOES[r][0 if feminino else 1] for r in restricoes])
+        if alergenicos:
+            # Os ids de um grupo aparecem pelo nome do grupo ("frutos do mar").
+            do_grupo = {a for g in grupos for a in self._ids_grupo(g)}
+            nomes = list(grupos) + [self._nome_alergenico(a) for a in alergenicos if a not in do_grupo]
+            if evitar:
+                # "Pratos sem glúten e sem frutos do mar" (nao "sem glúten sem").
+                titulo += (" e sem " if restricoes else " sem ") + _juntar(nomes)
+            else:
+                titulo += " que levam " + _juntar(nomes)
+        if preco_min is not None and preco_max is not None:
+            titulo += " " + MENSAGENS_CONSULTA["faixa_entre"].format(
+                minimo=_preco(preco_min), maximo=_preco(preco_max)
+            )
+        elif preco_max is not None:
+            titulo += " " + MENSAGENS_CONSULTA["faixa_ate"].format(maximo=_preco(preco_max))
+        elif preco_min is not None:
+            titulo += " " + MENSAGENS_CONSULTA["faixa_a_partir"].format(minimo=_preco(preco_min))
+        return titulo
+
+    def _ids_grupo(self, grupo: str) -> list[str]:
+        """Ids dos alergenicos de um termo de alergenicos.termos_ambiguos."""
+        for termo in self.base["alergenicos"].get("termos_ambiguos", []):
+            if termo["termo"] == grupo:
+                return termo["ids"]
+        return []
+
+    def _cardapio_completo(self) -> str:
+        """Cardapio inteiro, por categoria, com precos."""
+        lista = self._lista_por_categoria(list(self.pratos.values()), com_titulos=True)
+        return MENSAGENS_CONSULTA["cardapio_completo"].format(lista=lista)
+
+    @staticmethod
+    def _lista_por_categoria(pratos: list[dict], com_titulos: bool) -> str:
+        """Um prato por linha, com recuo e preco, agrupado por categoria.
+
+        Entradas:
+           • Ostras in Natura (dúzia) – R$ 59,90
+           • ...
+        Sem titulos (o pedido ja era de uma categoria so), so as linhas.
+        """
+        blocos = []
+        for categoria, (nome, _) in _CATEGORIAS_CARDAPIO.items():
+            linhas = [
+                MENSAGENS_CONSULTA["item_lista"].format(nome=p["nome"], preco=_preco(p["preco"]))
+                for p in pratos if p["categoria"] == categoria
+            ]
+            if not linhas:
+                continue
+            if com_titulos:
+                linhas.insert(0, MENSAGENS_CONSULTA["titulo_categoria"].format(categoria=nome))
+            blocos.append("\n".join(linhas))
+        return ("\n\n" if com_titulos else "\n").join(blocos)
 
     def _citado_so_pela_restricao(self, id_prato: str, restricoes: list[str], texto: str) -> bool:
         """Diz se o prato so aparece na mensagem por um sinonimo que contem a restricao.
@@ -852,7 +1403,7 @@ class GerenciadorDialogo:
             nome=prato["nome"],
             descricao=prato["descricao"],
             serve=_plural(prato["serve_pessoas"], "pessoa", "pessoas"),
-            preco=f"R$ {prato['preco']:.2f}".replace(".", ","),
+            preco=_preco(prato["preco"]),
         )]
         if prato["alergenicos"]:
             lista = _juntar([self._nome_alergenico(a) for a in prato["alergenicos"]])
@@ -863,36 +1414,6 @@ class GerenciadorDialogo:
             lista = _juntar([self._nome_alergenico(a) for a in prato["pode_conter"]])
             partes.append(MENSAGENS_CONSULTA["prato_pode_conter"].format(lista=lista))
         return " ".join(partes)
-
-    def _listar_restricao(self, restricao: str) -> str:
-        """Pratos que atendem a restricao (vegano, sem gluten...)."""
-        nome = _NOMES_RESTRICOES[restricao]
-        pratos = [p["nome"] for p in self.pratos.values() if p.get(restricao)]
-        if not pratos:
-            return MENSAGENS_CONSULTA["lista_vazia"].format(criterio=nome)
-        return MENSAGENS_CONSULTA["lista_restricao"].format(
-            restricao=nome + ("s" if nome.endswith("a") else ""), pratos=_juntar(pratos)
-        )
-
-    def _listar_por_alergenico(self, id_alergenico: str, evitar: bool) -> str:
-        """Pratos sem o alergenico (evitar=True) ou que o levam (evitar=False).
-
-        Para quem quer evitar, "pode conter" tambem fica de fora, por seguranca.
-        """
-        nome = self._nome_alergenico(id_alergenico)
-        if evitar:
-            pratos = [
-                p["nome"] for p in self.pratos.values()
-                if id_alergenico not in p["alergenicos"]
-                and id_alergenico not in p.get("pode_conter", [])
-            ]
-            chave, criterio = "lista_sem_alergenico", f"sem {nome}"
-        else:
-            pratos = [p["nome"] for p in self.pratos.values() if id_alergenico in p["alergenicos"]]
-            chave, criterio = "lista_com_alergenico", f"com {nome}"
-        if not pratos:
-            return MENSAGENS_CONSULTA["lista_vazia"].format(criterio=criterio)
-        return MENSAGENS_CONSULTA[chave].format(alergenico=nome, pratos=_juntar(pratos))
 
     def _com_aviso(self, texto: str, alergenicos: list[str]) -> str:
         """Acrescenta as observacoes dos alergenicos citados e o aviso padrao da base."""
@@ -926,7 +1447,7 @@ class GerenciadorDialogo:
         texto = preprocessar(mensagem)
         for chave, regex in _RE_POLITICAS:
             if regex.search(texto):
-                return self.regras_reserva[chave]
+                return self._regra_reserva(chave)
 
         estado.etapa_reserva = "coletando"
         estado.slots = {}
@@ -938,6 +1459,25 @@ class GerenciadorDialogo:
                 return MENSAGENS_RESERVA["inicio"] + " " + texto_slots
             return texto_slots
         return MENSAGENS_RESERVA["inicio"] + " " + self._pergunta(estado)
+
+    def _regra_reserva(self, chave: str) -> str:
+        """Texto de uma politica da base, ou de uma regra montada com os numeros dela."""
+        regras = self.regras_reserva
+        if chave == "regra_antecedencia":
+            return MENSAGENS_RESERVA["regra_antecedencia"].format(
+                minimo=_plural(regras["antecedencia_minima_horas"], "hora", "horas"),
+                maximo=_plural(regras["antecedencia_maxima_dias"], "dia", "dias"),
+                janela=regras["janela"]["regra"],
+            )
+        if chave == "regra_pessoas":
+            restaurante = self.base["restaurante"]
+            return MENSAGENS_RESERVA["regra_pessoas"].format(
+                minimo=regras["min_pessoas"],
+                maximo=regras["max_pessoas"],
+                whatsapp=restaurante["whatsapp"],
+                telefone=restaurante["telefone"],
+            )
+        return regras[chave]
 
     def _continuar_reserva(self, mensagem: str, texto: str, estado: EstadoConversa) -> Resposta:
         """Trata uma mensagem com a reserva em andamento (regras ja testadas).
@@ -1037,7 +1577,15 @@ class GerenciadorDialogo:
     def _preencher_slots(self, novos: dict, estado: EstadoConversa) -> str:
         """Grava os slots novos, valida e pergunta o proximo (ou mostra o resumo)."""
         estado.slots.update(novos)
+        acima_do_limite = (novos.get("pessoas") or 0) > self.regras_reserva["max_pessoas"]
         erro = self._validar(estado)
+        if erro is not None and acima_do_limite:
+            # Grupo grande foi encaminhado para a equipe: encerra o fluxo em
+            # vez de perguntar "para quantas pessoas?" logo em seguida.
+            estado.encerrar_reserva()
+            return erro + "\n\n" + MENSAGENS_RESERVA["acima_limite_alternativa"].format(
+                maximo=self.regras_reserva["max_pessoas"]
+            )
         if erro is not None:
             # O slot invalido foi apagado: volta a coletar (mesmo se estava
             # no resumo, corrigindo um dado).
