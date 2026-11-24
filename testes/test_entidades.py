@@ -12,8 +12,9 @@ from chatbot.entidades import extrair_entidades
 
 REF = datetime(2026, 11, 16, 10, 0, tzinfo=ZoneInfo("America/Sao_Paulo"))
 CHAVES = {
-    "pratos", "pratos_ambiguos", "alergenicos", "restricoes", "pessoas", "data",
-    "dia_semana", "horario", "horario_ambiguo", "periodo", "nome",
+    "pratos", "pratos_ambiguos", "alergenicos", "grupos_alergenicos", "restricoes",
+    "categorias", "preco", "pessoas", "data", "dia_semana", "horario", "horario_ambiguo",
+    "periodo", "nome",
 }
 
 
@@ -27,8 +28,9 @@ def test_frase_sem_entidades_devolve_todas_as_chaves_vazias():
     r = extrair("oi, tudo bem?")
     assert set(r) == CHAVES
     assert r == {
-        "pratos": [], "pratos_ambiguos": {}, "alergenicos": [], "restricoes": [],
-        "pessoas": None, "data": None, "dia_semana": None, "horario": None,
+        "pratos": [], "pratos_ambiguos": {}, "alergenicos": [], "grupos_alergenicos": [],
+        "restricoes": [], "categorias": [], "preco": None, "pessoas": None, "data": None,
+        "dia_semana": None, "horario": None,
         "horario_ambiguo": None, "periodo": None, "nome": None,
     }
 
@@ -229,6 +231,63 @@ def test_nome_falso_positivo(texto):
     assert extrair(texto)["nome"] is None
 
 
+# --- grupos de alergenicos e categorias --------------------------------------
+
+def test_frutos_do_mar_vira_grupo_com_os_ids_da_base():
+    r = extrair("quero pratos sem frutos do mar, sou alérgico")
+    assert r["grupos_alergenicos"] == ["frutos do mar"]
+    assert r["alergenicos"] == ["crustaceos", "moluscos"]
+    assert r["pratos"] == []
+
+
+def test_prato_com_frutos_do_mar_no_nome_continua_prato():
+    r = extrair("o risoto de frutos do mar tem glúten?")
+    assert r["pratos"] == ["risoto_frutos_mar"]
+    assert r["grupos_alergenicos"] == []
+    assert r["alergenicos"] == ["trigo_gluten"]
+
+
+@pytest.mark.parametrize(
+    "texto, categorias",
+    [
+        ("quero pratos principais", ["prato_principal"]),
+        ("quais as entradas?", ["entrada"]),
+        ("tem sobremesa vegana?", ["sobremesa"]),
+        ("tem algum doce sem lactose?", ["sobremesa"]),
+        ("entradas e sobremesas", ["entrada", "sobremesa"]),
+        ("quero reservar uma mesa", []),
+    ],
+)
+def test_categorias(texto, categorias):
+    assert extrair(texto)["categorias"] == categorias
+
+
+# --- preco -----------------------------------------------------------------
+
+@pytest.mark.parametrize(
+    "texto, preco",
+    [
+        ("tem algo até 50 reais?", {"min": None, "max": 50.0, "ordem": None}),
+        ("prato abaixo de R$ 30", {"min": None, "max": 30.0, "ordem": None}),
+        ("até R$49,90", {"min": None, "max": 49.9, "ordem": None}),
+        ("pratos acima de 100 reais", {"min": 100.0, "max": None, "ordem": None}),
+        ("entre 100 e 50 reais", {"min": 50.0, "max": 100.0, "ordem": None}),
+        ("qual o prato mais barato?", {"min": None, "max": None, "ordem": "barato"}),
+        ("qual a sobremesa mais cara?", {"min": None, "max": None, "ordem": "caro"}),
+    ],
+)
+def test_preco(texto, preco):
+    assert extrair(texto)["preco"] == preco
+
+
+@pytest.mark.parametrize(
+    "texto",
+    ["reserva para até 10 pessoas", "abre até as 20h?", "mais de 10 pessoas", "quanto custa o pudim?"],
+)
+def test_numero_sem_faixa_de_preco_nao_vira_preco(texto):
+    assert extrair(texto)["preco"] is None
+
+
 # --- frase completa --------------------------------------------------------
 
 def test_frase_completa():
@@ -237,7 +296,10 @@ def test_frase_completa():
         "pratos": [],
         "pratos_ambiguos": {},
         "alergenicos": ["trigo_gluten"],
+        "grupos_alergenicos": [],
         "restricoes": ["sem_gluten"],
+        "categorias": [],
+        "preco": None,
         "pessoas": 4,
         "data": "2026-11-21",
         "dia_semana": "sabado",

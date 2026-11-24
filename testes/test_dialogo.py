@@ -147,10 +147,10 @@ def test_aceita_zera_contador_e_define_assunto(gerente, estado):
     assert estado.assunto_anterior == "reserva"
 
 
-def test_aceita_outra_intencao_usa_resposta_fixa(gerente, estado):
+def test_aceita_outra_intencao_responde_a_intencao(gerente, estado):
     resposta = gerente.responder("que horas vocês abrem?", estado)
     assert resposta.tipo == "aceita"
-    assert resposta.texto in RESPOSTAS["horario_localizacao"]
+    assert resposta.texto.startswith("Nosso horário de funcionamento:")
 
 
 def test_duas_mensagens_sem_sentido_levam_ao_encaminhamento(gerente, estado):
@@ -207,7 +207,7 @@ def test_esclarecimento_resolvido_no_turno_seguinte(gerente, estado, monkeypatch
     resposta = gerente.responder("sobre o horario", estado)
     assert resposta.tipo == "aceita"
     assert resposta.intencao == "horario_localizacao"
-    assert resposta.texto in RESPOSTAS["horario_localizacao"]
+    assert resposta.texto.startswith("Nosso horário de funcionamento:")
     assert estado.esclarecimento is None
     assert estado.assunto_anterior == "horario_localizacao"
 
@@ -318,6 +318,40 @@ def test_onze_pessoas_oferece_atendente(reserva, estado):
     assert BASE["restaurante"]["whatsapp"] in r.texto
     assert "pessoas" not in estado.slots
     assert estado.encaminhado is True
+    # Encaminhado: o fluxo termina, sem perguntar "para quantas pessoas?".
+    assert estado.etapa_reserva is None
+    assert MENSAGENS_RESERVA["pergunta_pessoas"] not in r.texto
+    assert "até 10 pessoas" in r.texto
+
+
+@pytest.mark.parametrize(
+    "mensagem", ["preciso reservar com quanta antecedência?", "até quando posso reservar?"]
+)
+def test_pergunta_de_antecedencia_responde_a_regra_sem_abrir_reserva(reserva, estado, mensagem):
+    r = reserva.responder(mensagem, estado)
+    assert r.texto.startswith("A reserva precisa ser feita com pelo menos 1 hora de antecedência")
+    assert "30 dias" in r.texto
+    assert estado.etapa_reserva is None
+
+
+@pytest.mark.parametrize(
+    "mensagem", ["quantas pessoas no máximo posso reservar?", "qual o limite de pessoas pra reserva?"]
+)
+def test_pergunta_de_limite_de_pessoas_responde_a_regra(reserva, estado, mensagem):
+    r = reserva.responder(mensagem, estado)
+    assert r.texto.startswith("Pelo chat eu faço reservas de 1 a 10 pessoas.")
+    assert estado.etapa_reserva is None
+
+
+def test_grupo_grande_no_meio_da_reserva_encerra_o_fluxo(reserva, estado):
+    r = _conversa(reserva, estado, "quero reservar uma mesa", "15 pessoas")
+    assert REGRAS["mensagem_acima_limite"] in r.texto
+    assert estado.etapa_reserva is None
+
+
+def test_depois_do_grupo_grande_da_para_reservar_ate_dez(reserva, estado):
+    r = _conversa(reserva, estado, "dá pra reservar pra 15 pessoas?", "quero reservar para 8 pessoas")
+    assert estado.slots["pessoas"] == 8
     assert estado.etapa_reserva == "coletando"
 
 
@@ -460,9 +494,9 @@ def test_horario_de_um_dia(reserva, estado):
     assert estado.ultima_data == "2026-11-21"
 
 
-def test_horario_sem_data_mantem_resposta_fixa(reserva, estado):
+def test_horario_sem_data_responde_a_semana(reserva, estado):
     r = reserva.responder("que horas vocês abrem?", estado)
-    assert r.texto in RESPOSTAS["horario_localizacao"]
+    assert r.texto.startswith("Nosso horário de funcionamento:")
     assert estado.ultima_data is None
 
 
@@ -525,6 +559,433 @@ def test_alergia_lista_pratos_sem_ele(reserva, estado):
     assert r.texto.startswith("Pratos sem crustáceos:")
     # "Pode conter" tambem fica de fora, por seguranca.
     assert PRATOS["caldo_peixe"]["nome"] not in r.texto
+
+
+@pytest.mark.parametrize(
+    "mensagem",
+    [
+        "quais pratos não têm camarão?",
+        "quero pratos que não levam camarão",
+        "tem algum prato que não contém camarão?",
+        "me mostra os pratos que não tenham siri",
+        "pratos livres de crustáceos",
+    ],
+)
+def test_negacao_lista_pratos_sem_o_alergenico(reserva, estado, mensagem):
+    r = reserva.responder(mensagem, estado)
+    assert r.texto.startswith("Pratos sem crustáceos:")
+    assert PRATOS["bolinho_siri"]["nome"] not in r.texto
+    assert PRATOS["camarao_na_moranga"]["nome"] not in r.texto
+
+
+def _sem_os_alergenicos(ids):
+    """Nomes dos pratos sem nenhum dos alergenicos, nem como "pode conter"."""
+    return [
+        p["nome"] for p in BASE["cardapio"]
+        if not set(ids) & (set(p["alergenicos"]) | set(p.get("pode_conter", [])))
+    ]
+
+
+def test_ver_cardapio_lista_todos_os_pratos_por_categoria(reserva, estado):
+    r = reserva.responder("quero ver o cardápio", estado)
+    assert r.intencao == "cardapio_alergenicos"
+    assert r.texto.startswith("Este é o nosso cardápio:")
+    linhas = r.texto.split("\n")
+    # Cada prato numa linha propria, com recuo, nome e preco.
+    for prato in BASE["cardapio"]:
+        assert any(
+            linha.startswith("   • " + prato["nome"] + " – R$ ") for linha in linhas
+        ), prato["nome"]
+    # Titulo de cada categoria numa linha sozinha, sem recuo, antes dos pratos.
+    for titulo in ("Entradas:", "Pratos principais:", "Sobremesas:"):
+        assert titulo in linhas
+    i = linhas.index("Sobremesas:")
+    assert linhas[i + 1] == "   • Pudim de Leite – R$ 18,90"
+
+
+def test_pergunta_vaga_sobre_comida_mantem_resposta_fixa(reserva, estado):
+    r = reserva.responder("as comidas são gostosas?", estado)
+    assert r.texto in RESPOSTAS["cardapio_alergenicos"]
+
+
+def test_pratos_principais_sem_frutos_do_mar(reserva, estado):
+    r = reserva.responder(
+        "quero pratos principais, mas sem frutos do mar, pois sou alérgico", estado
+    )
+    esperados = [
+        p["nome"] for p in BASE["cardapio"]
+        if p["categoria"] == "prato_principal"
+        and p["nome"] in _sem_os_alergenicos(["crustaceos", "moluscos"])
+    ]
+    assert esperados == ["Moqueca de Banana-da-Terra com Palmito"]
+    assert r.texto.startswith(
+        "Pratos principais sem frutos do mar:\n"
+        "   • Moqueca de Banana-da-Terra com Palmito – R$ 89,90\n\n"
+    )
+    assert "crustáceos e moluscos" in r.texto
+    assert AVISO_ALERGENICOS in r.texto
+
+
+def test_sem_frutos_do_mar_exclui_crustaceos_e_moluscos_de_todas_as_categorias(reserva, estado):
+    r = reserva.responder("quais pratos sem frutos do mar?", estado)
+    permitidos = _sem_os_alergenicos(["crustaceos", "moluscos"])
+    proibidos = [p["nome"] for p in BASE["cardapio"] if p["nome"] not in permitidos]
+    assert r.texto.startswith("Pratos sem frutos do mar:\n\nPratos principais:\n")
+    assert all(nome in r.texto for nome in permitidos)
+    assert not any(nome in r.texto for nome in proibidos)
+
+
+def test_varios_alergenicos_geram_uma_lista_so(reserva, estado):
+    r = reserva.responder("sou alérgico a camarão e peixe, o que posso comer?", estado)
+    permitidos = _sem_os_alergenicos(["crustaceos", "peixes"])
+    proibidos = [p["nome"] for p in BASE["cardapio"] if p["nome"] not in permitidos]
+    assert r.texto.startswith("Pratos sem crustáceos e peixes:")
+    assert r.texto.count("Pratos sem") == 1
+    assert all(nome in r.texto for nome in permitidos)
+    assert not any(nome in r.texto for nome in proibidos)
+
+
+def test_categoria_sozinha_lista_a_categoria(reserva, estado):
+    r = reserva.responder("quais as sobremesas?", estado)
+    sobremesas = [p["nome"] for p in BASE["cardapio"] if p["categoria"] == "sobremesa"]
+    assert r.texto.startswith("Sobremesas:")
+    assert all(nome in r.texto for nome in sobremesas)
+    assert "Pudim de Leite – R$ 18,90" in r.texto
+
+
+def test_categoria_com_restricao_concorda_no_feminino(reserva, estado):
+    r = reserva.responder("tem sobremesa vegana?", estado)
+    assert r.texto.startswith("Sobremesas veganas:\n   • Manjar de Coco – R$ 17,90\n\n")
+
+
+def test_categoria_com_restricao_sem_resultado(reserva, estado):
+    r = reserva.responder("tem entrada vegana?", estado)
+    assert r.texto.startswith("No momento não temos entradas veganas.")
+
+
+# --- Classificador: perguntas claras que caiam em fora_escopo (dataset v1.5) -------
+
+
+@pytest.mark.parametrize(
+    "mensagem, intencao",
+    [
+        ("qual o horário de sábado?", "horario_localizacao"),
+        ("horario", "horario_localizacao"),
+        ("me manda o menu", "cardapio_alergenicos"),
+        ("o que vc recomenda?", "cardapio_alergenicos"),
+        ("com quanto tempo antes tenho que reservar?", "reserva"),
+    ],
+)
+def test_perguntas_do_dominio_sao_aceitas(reserva, estado, mensagem, intencao):
+    r = reserva.responder(mensagem, estado)
+    assert r.tipo == "aceita"
+    assert r.intencao == intencao
+
+
+@pytest.mark.parametrize(
+    "mensagem",
+    [
+        "qual o horário de funcionamento do detran",
+        "qual o horário do banco hoje",
+        "me recomenda uma série",
+        "horário de verão",
+    ],
+)
+def test_mesmas_palavras_em_outro_sentido_continuam_fora_do_escopo(reserva, estado, mensagem):
+    r = reserva.responder(mensagem, estado)
+    assert r.intencao == "fora_escopo"
+
+
+# --- Filtro por preco ---------------------------------------------------------------
+
+
+def _nomes_ate(valor):
+    return [p["nome"] for p in BASE["cardapio"] if p["preco"] <= valor]
+
+
+def test_ate_x_reais_lista_so_os_pratos_na_faixa(reserva, estado):
+    r = reserva.responder("tem algo até 50 reais?", estado)
+    assert r.intencao == "cardapio_alergenicos"
+    assert r.texto.startswith("Pratos até R$ 50,00:")
+    assert all(nome in r.texto for nome in _nomes_ate(50))
+    assert not any(p["nome"] in r.texto for p in BASE["cardapio"] if p["preco"] > 50)
+
+
+def test_lista_com_faixa_vem_do_mais_barato_ao_mais_caro(reserva, estado):
+    r = reserva.responder("tem algo até 50 reais?", estado)
+    assert r.texto.index("Manjar de Coco") < r.texto.index("Pudim de Leite") < r.texto.index("Cocada de Forno")
+
+
+def test_faixa_entre_dois_valores(reserva, estado):
+    r = reserva.responder("pratos entre 100 e 150 reais", estado)
+    assert r.texto.startswith("Pratos entre R$ 100,00 e R$ 150,00:")
+    assert all(
+        p["nome"] in r.texto for p in BASE["cardapio"] if 100 <= p["preco"] <= 150
+    )
+    assert PRATOS["sequencia_camarao_tradicional"]["nome"] not in r.texto
+
+
+def test_faixa_sem_resultado_indica_o_mais_barato(reserva, estado):
+    r = reserva.responder("tem algo até 15 reais?", estado)
+    barato = min(BASE["cardapio"], key=lambda p: p["preco"])
+    assert r.texto.startswith("No momento não temos pratos até R$ 15,00.")
+    assert barato["nome"] in r.texto
+
+
+def test_mais_barato_de_cada_categoria(reserva, estado):
+    r = reserva.responder("qual o prato mais barato?", estado)
+    assert r.texto.startswith("O mais barato de cada categoria:")
+    assert "Caldo de Peixe – R$ 24,90" in r.texto
+    assert "Moqueca de Banana-da-Terra com Palmito – R$ 89,90" in r.texto
+    assert "Tainha Escalada" not in r.texto
+
+
+def test_mais_cara_de_uma_categoria_concorda_no_feminino(reserva, estado):
+    r = reserva.responder("qual a sobremesa mais cara?", estado)
+    assert r.texto == "Sobremesas (a mais cara):\n   • Cocada de Forno – R$ 19,90"
+
+
+def test_preco_combina_com_alergia(reserva, estado):
+    r = reserva.responder("qual o prato mais barato sem frutos do mar?", estado)
+    assert r.texto.startswith("Pratos sem frutos do mar (o mais barato de cada categoria):")
+    assert "Caldo de Peixe" not in r.texto  # pode conter crustaceos
+
+
+def test_preco_herda_a_categoria_da_lista_anterior(reserva, estado):
+    r = _conversa(reserva, estado, "quero pratos principais", "e até 120 reais?")
+    assert r.herdou_contexto
+    assert r.texto.startswith("Pratos principais até R$ 120,00:")
+    assert "Salada da Casa" not in r.texto
+
+
+def test_filtro_novo_herda_a_faixa_de_preco(reserva, estado):
+    r = _conversa(reserva, estado, "tem algo até 50 reais?", "e sem glúten?")
+    assert r.texto.startswith("Opções sem glúten até R$ 50,00:")
+
+
+def test_preco_de_um_prato_continua_a_descricao(reserva, estado):
+    r = reserva.responder("quanto custa o pudim?", estado)
+    assert r.texto.startswith("Pudim de Leite:")
+
+
+# --- Porcao ("prato para 2 pessoas") ------------------------------------------------
+
+
+@pytest.mark.parametrize("mensagem", ["tem prato para 2 pessoas?", "qual prato serve duas pessoas"])
+def test_prato_para_n_pessoas_lista_a_porcao_sem_abrir_reserva(reserva, estado, mensagem):
+    r = reserva.responder(mensagem, estado)
+    assert r.intencao == "cardapio_alergenicos"
+    assert r.texto.startswith("Pratos que servem 2 pessoas:")
+    assert estado.etapa_reserva is None
+    dois = [p["nome"] for p in BASE["cardapio"] if p["serve_pessoas"] == 2]
+    um = [p["nome"] for p in BASE["cardapio"] if p["serve_pessoas"] == 1]
+    assert all(nome in r.texto for nome in dois)
+    assert not any(nome in r.texto for nome in um)
+
+
+def test_prato_individual_lista_os_que_servem_uma_pessoa(reserva, estado):
+    r = reserva.responder("tem prato individual?", estado)
+    assert r.texto.startswith("Pratos que servem 1 pessoa:")
+
+
+def test_porcao_inexistente(reserva, estado):
+    r = reserva.responder("tem porção pra 4 pessoas?", estado)
+    assert r.texto == "No momento não temos pratos que sirvam 4 pessoas. Nossos pratos servem 1 ou 2 pessoas."
+
+
+def test_prato_citado_com_numero_de_pessoas_responde_a_porcao_dele(reserva, estado):
+    r = reserva.responder("o pudim serve 2 pessoas?", estado)
+    assert r.texto == "Pudim de Leite serve 1 pessoa."
+    assert estado.etapa_reserva is None
+
+
+def test_reserva_com_numero_de_pessoas_continua_reserva(reserva, estado):
+    r = reserva.responder("quero reservar mesa para 2 pessoas", estado)
+    assert r.intencao == "reserva"
+    assert estado.slots["pessoas"] == 2
+
+
+# --- Fora do cardapio -------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mensagem", ["tem cerveja?", "vocês servem vinho?", "tem bebida?"])
+def test_bebidas_indicam_a_equipe(reserva, estado, mensagem):
+    r = reserva.responder(mensagem, estado)
+    assert r.texto.startswith("Ainda não tenho aqui as informações de bebidas.")
+    assert BASE["restaurante"]["whatsapp"] in r.texto
+
+
+@pytest.mark.parametrize(
+    "mensagem, termo", [("tem pizza?", "pizza"), ("tem lasanha?", "lasanha"), ("tem sorvete?", "sorvete")]
+)
+def test_item_fora_do_cardapio_diz_que_nao_encontrou(reserva, estado, mensagem, termo):
+    r = reserva.responder(mensagem, estado)
+    assert r.texto.startswith(f"Não encontrei “{termo}” no nosso cardápio.")
+
+
+def test_item_do_cardapio_continua_respondido(reserva, estado):
+    r = reserva.responder("tem lula?", estado)
+    assert r.texto.startswith("Lula à Dorê:")
+
+
+# --- Continuacao de horario/localizacao sem data -----------------------------------
+
+
+def test_e_pago_depois_de_estacionamento(reserva, estado):
+    r = _conversa(reserva, estado, "tem estacionamento?", "e é pago?")
+    assert r.herdou_contexto
+    assert r.texto.startswith("O estacionamento é gratuito")
+
+
+def test_e_o_endereco_depois_de_estacionamento(reserva, estado):
+    r = _conversa(reserva, estado, "tem estacionamento?", "e o endereço?")
+    assert r.herdou_contexto
+    assert "Rendeiras" in r.texto
+
+
+# --- Contato --------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "mensagem", ["qual o telefone de vcs?", "tem whatsapp?", "me passa o zap", "posso ligar pra reservar?"]
+)
+def test_contato_responde_telefone_e_whatsapp(reserva, estado, mensagem):
+    r = reserva.responder(mensagem, estado)
+    assert r.tipo == "regra"
+    assert BASE["restaurante"]["whatsapp"] in r.texto
+    assert BASE["restaurante"]["telefone"] in r.texto
+
+
+def test_contato_no_meio_da_reserva_lembra_o_passo(reserva, estado):
+    r = _conversa(reserva, estado, "quero reservar uma mesa", "qual o telefone?")
+    assert BASE["restaurante"]["telefone"] in r.texto
+    assert estado.etapa_reserva is not None
+    assert "pessoas" in r.texto
+
+
+# --- Esclarecimento de data solta respondido com outra data ---------------------
+
+
+def test_esclarecimento_respondido_com_outra_data_usa_a_nova(reserva, estado):
+    r = _conversa(reserva, estado, "e domingo?", "e segunda?")
+    assert r.intencao == "horario_localizacao"
+    assert r.texto == "Na segunda-feira (23/11) o restaurante fica fechado."
+    assert estado.ultima_data == "2026-11-23"
+
+
+def test_esclarecimento_reserva_com_outra_data_mantem_o_horario(reserva, estado):
+    _conversa(reserva, estado, "domingo às 20h", "quero reservar pra sábado")
+    assert estado.slots["data"] == "2026-11-21"
+    assert estado.slots["horario"] == "20:00"
+
+
+def test_esclarecimento_sem_data_nova_usa_a_data_solta(reserva, estado):
+    r = _conversa(reserva, estado, "domingo", "horário")
+    assert r.texto.startswith("No domingo (22/11)")
+
+
+# --- Alergenico liberado ("mas como peixe") ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "mensagem, titulo",
+    [
+        ("sou alergico a camarao mas como peixe, quais pratos posso comer?", "Pratos sem crustáceos:"),
+        ("sou alérgico a camarão, peixe eu como", "Pratos sem crustáceos:"),
+        ("sou alérgico a camarão, mas não tenho alergia a peixe", "Pratos sem crustáceos:"),
+        ("sou alérgico a ovo, mas leite tudo bem", "Pratos sem ovos:"),
+    ],
+)
+def test_alergenico_liberado_sai_do_filtro(reserva, estado, mensagem, titulo):
+    r = reserva.responder(mensagem, estado)
+    assert r.texto.startswith(titulo)
+
+
+@pytest.mark.parametrize(
+    "mensagem",
+    [
+        "sou alérgico a camarão e peixe, o que posso comer?",
+        "sou alérgico a camarão e peixe, o que eu posso comer?",
+        "sou alérgico a camarão e peixe, como vocês preparam?",
+        "sou alérgico a camarão e não como peixe",
+        "não como camarão nem peixe",
+    ],
+)
+def test_sem_liberacao_explicita_os_dois_continuam_evitados(reserva, estado, mensagem):
+    r = reserva.responder(mensagem, estado)
+    assert r.texto.startswith("Pratos sem crustáceos e peixes:")
+
+
+# --- Titulo das listas --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "mensagem, titulo",
+    [
+        ("tem prato sem frutos do mar e sem glúten?", "Pratos sem glúten e sem frutos do mar:"),
+        ("tem sobremesa vegana sem amendoim?", "Sobremesas veganas e sem amendoim:"),
+        ("pratos sem crustáceos", "Pratos sem crustáceos:"),
+    ],
+)
+def test_titulo_da_lista_com_restricao_e_alergenico(reserva, estado, mensagem, titulo):
+    r = reserva.responder(mensagem, estado)
+    assert r.texto.startswith(titulo)
+
+
+# --- Heranca dos filtros do cardapio ---------------------------------------------
+
+
+def test_alergia_continua_valendo_na_continuacao(reserva, estado):
+    r = _conversa(reserva, estado, "sou alérgico a frutos do mar", "e de sobremesa?")
+    assert r.herdou_contexto
+    assert r.texto.startswith("Sobremesas sem frutos do mar:")
+
+    r = reserva.responder("e entrada?", estado)
+    assert r.texto.startswith("No momento não temos entradas sem frutos do mar.")
+    assert PRATOS["ostras_in_natura"]["nome"] not in r.texto
+    assert PRATOS["bolinho_siri"]["nome"] not in r.texto
+
+
+def test_categoria_continua_valendo_com_alergia_nova(reserva, estado):
+    r = _conversa(reserva, estado, "quero pratos principais", "sem frutos do mar")
+    assert r.texto.startswith(
+        "Pratos principais sem frutos do mar:\n"
+        "   • Moqueca de Banana-da-Terra com Palmito – R$ 89,90\n\n"
+    )
+
+
+def test_restricoes_se_acumulam(reserva, estado):
+    r = _conversa(reserva, estado, "tem prato sem glúten?", "e sem lactose também?")
+    assert r.texto.startswith("Opções sem glúten e sem lactose:")
+    assert PRATOS["sirigado_grelhado"]["nome"] not in r.texto  # sem gluten, mas com leite
+
+
+def test_restricao_nova_filtra_a_categoria_anterior(reserva, estado):
+    r = _conversa(reserva, estado, "o que tem de sobremesa?", "e vegano?")
+    assert r.texto.startswith("Sobremesas veganas:\n   • Manjar de Coco – R$ 17,90\n\n")
+
+
+def test_e_alergenico_mantem_o_sentido_de_evitar(reserva, estado):
+    r = _conversa(reserva, estado, "sou alérgico a camarão", "e amendoim?")
+    assert r.texto.startswith("Pratos sem crustáceos e amendoim:")
+    assert PRATOS["cocada_forno"]["nome"] not in r.texto  # pode conter amendoim
+
+
+def test_e_alergenico_depois_de_um_prato_fala_do_prato(reserva, estado):
+    r = _conversa(reserva, estado, "a moqueca de peixe tem glúten?", "e camarão?")
+    assert r.herdou_contexto
+    assert r.texto.startswith("Moqueca de Peixe não leva crustáceos na receita, mas pode conter traços")
+
+
+def test_cardapio_completo_seguido_de_filtro(reserva, estado):
+    r = _conversa(reserva, estado, "quero ver o cardápio", "e sem glúten?")
+    assert r.texto.startswith("Opções sem glúten:")
+
+
+def test_outra_intencao_nao_herda_filtros(reserva, estado):
+    r = _conversa(reserva, estado, "sou alérgico a camarão", "quero reservar uma mesa")
+    assert r.intencao == "reserva"
+    assert not r.herdou_contexto
 
 
 def test_prato_ambiguo_pergunta_qual(reserva, estado):
