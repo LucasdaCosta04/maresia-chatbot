@@ -15,6 +15,7 @@
     "ponto_referencia": "A cerca de 200 m da Igreja Nossa Senhora das Necessidades, no caminho para o trapiche de Santo Antônio de Lisboa.",
     "estacionamento": {
       "tipo": "próprio e gratuito",
+      "gratuito": true,
       "vagas": 20,
       "vagas_pcd": 2,
       "vagas_idosos": 1,
@@ -531,8 +532,8 @@
       "intencao": "horario_localizacao",
       "frases": [],
       "respostas_fixas": [
-        "Abrimos de terça a domingo, no almoço e no jantar (domingo só almoço). Segunda estamos fechados. 🌊",
-        "Ficamos na Rua das Rendeiras Açorianas, 120, em Santo Antônio de Lisboa, perto da Igreja Nossa Senhora das Necessidades. Temos estacionamento próprio.",
+        "Posso te ajudar com o nosso horário de funcionamento, o endereço, como chegar ou o estacionamento. O que você quer saber? 🌊",
+        "Sobre horário e localização, você pode me perguntar, por exemplo: \"que horas abrem no sábado?\", \"qual o endereço?\" ou \"tem estacionamento?\".",
         "Quer saber o horário de algum dia ou como chegar até a gente? É só perguntar."
       ]
     },
