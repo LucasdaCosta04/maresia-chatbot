@@ -2,8 +2,8 @@
 
 Dataset de treino do classificador de intenções da **Maresia**, assistente virtual do restaurante
 fictício **Tempero Açoriano** (frutos do mar, Santo Antônio de Lisboa, Florianópolis/SC).
-Versão atual: **v1.3 — 251 frases** (`cardapio_alergenicos` 59, `reserva` 69,
-`horario_localizacao` 64, `fora_escopo` 59).
+Versão atual: **v1.5 — 265 frases** (`cardapio_alergenicos` 63, `reserva` 71,
+`horario_localizacao` 72, `fora_escopo` 59).
 
 ## Origem
 
@@ -71,7 +71,9 @@ O script `scripts/checar_dataset.py` falha se algum desses temas aparecer no tre
 | lote 1 | 138 | 35 | 35 | 34 | 34 | Base inicial das quatro classes. |
 | lote 2 | 224 | 56 | 56 | 56 | 56 | +86 frases: alergênicos específicos (moluscos, gergelim, soja, ovo, amendoim), alteração e cancelamento de reserva, estacionamento e "como chegar", `fora_escopo` com palavras do domínio em outro sentido. |
 | lote 3 — **v1.0** | 236 | 59 | 59 | 59 | 59 | +12 frases (3 por classe) para cobrir casos de borda restantes. |
-| **v1.3** | 251 | 59 | 69 | 64 | 59 | +15 frases para corrigir lacunas de vocabulário apontadas pela avaliação cega (ver abaixo). |
+| v1.3 | 251 | 59 | 69 | 64 | 59 | +15 frases para corrigir lacunas de vocabulário apontadas pela avaliação cega (ver abaixo). |
+| v1.4 | 255 | 59 | 69 | 68 | 59 | +4 frases de `horario_localizacao` com "atendimento" (ver abaixo). |
+| **v1.5** | 265 | 63 | 71 | 72 | 59 | +10 frases para perguntas claras que caíam em `fora_escopo` (ver abaixo). |
 
 ### Evolução v1.0 → v1.3
 
@@ -98,6 +100,33 @@ abaixo do limite de 0,85. Os casos que mais subiram foram T10 (0,230 → 0,271) 
 
 **Efeito colateral.** As classes deixaram de ser balanceadas (69 e 64 contra 59). A diferença é pequena,
 mas deve ser lembrada ao interpretar a matriz de confusão.
+
+### Evolução v1.3 → v1.4
+
+**Motivo.** "qual o horário de atendimento?" caía em `fora_escopo`: a única frase do treino com
+"atendimento" era "qual o horário de atendimento do posto de saúde" (`fora_escopo`). Foram acrescentadas
+**4 frases de `horario_localizacao`** com "atendimento". A frase do posto de saúde continua no treino,
+e perguntas de horário de atendimento de outros lugares (banco, posto) continuam em `fora_escopo`.
+
+**Conferência.** `scripts/checar_dataset.py` sem erros. Em `scripts/checar_casos_teste.py`, a similaridade
+média continua em **0,364** e a máxima é **0,671**, abaixo do limite de 0,85.
+
+### Evolução v1.4 → v1.5
+
+**Motivo.** Uma bateria exploratória de perguntas de clientes mostrou perguntas claras do domínio caindo
+em `fora_escopo` ou no fallback: horário de um dia ("qual o horário de sábado?"), "horário" sozinho,
+"menu", pedido de recomendação de prato e antecedência da reserva. Foram acrescentadas **10 frases**:
+4 de `horario_localizacao`, 4 de `cardapio_alergenicos` e 2 de `reserva`. Nenhuma copia as frases da
+bateria nem dos casos de teste.
+
+**Conferência.** `scripts/checar_dataset.py` sem erros. Em `scripts/checar_casos_teste.py`, a similaridade
+média foi para **0,365** e a máxima para **0,672**, abaixo do limite de 0,85. Perguntas com as mesmas
+palavras em outro sentido ("horário do Detran", "horário do banco", "me recomenda uma série", "horário de
+verão") continuam em `fora_escopo`.
+
+**Efeito colateral.** A acurácia da validação cruzada (5 folds) ficou em **0,815**; na v1.4 era 0,835.
+Os números não são diretamente comparáveis (o conjunto mudou), e as classes ficaram mais desbalanceadas
+(`fora_escopo` com 59 contra 63 a 72 das outras).
 
 ## Casos de teste (`casos_teste.csv`)
 

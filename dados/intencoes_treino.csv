@@ -250,3 +250,17 @@ localização pfv,horario_localizacao
 tem mapa?,horario_localizacao
 onde vcs ficam?,horario_localizacao
 como chegar aí?,horario_localizacao
+qual o horário de atendimento de vcs?,horario_localizacao
+o atendimento do restaurante começa que horas,horario_localizacao
+vcs tem atendimento no domingo à noite?,horario_localizacao
+até que horas vai o atendimento na sexta,horario_localizacao
+qual o horário de quinta?,horario_localizacao
+horário de sexta à noite,horario_localizacao
+horário,horario_localizacao
+horários de vcs,horario_localizacao
+manda o menu aí,cardapio_alergenicos
+posso ver o menu?,cardapio_alergenicos
+o que você recomenda pra comer?,cardapio_alergenicos
+qual prato vc indica?,cardapio_alergenicos
+com quanto tempo de antecedência preciso reservar?,reserva
+quantos dias antes dá pra fazer reserva?,reserva
